@@ -1,0 +1,12 @@
+Qingjian Speech receiver: GPL-3.0, source in apps/android-speech.
+KittenTTS nano 0.1 weights: Apache-2.0. https://huggingface.co/KittenML/kitten-tts-nano-0.1
+Kokoro 1.0 weights and af_heart voice: Apache-2.0. https://huggingface.co/hexgrad/Kokoro-82M
+Sherpa-ONNX Kokoro model package: https://github.com/k2-fsa/sherpa-onnx/releases/download/tts-models/kokoro-multi-lang-v1_0.tar.bz2
+The bundled Kokoro LICENSE is preserved in assets/kokoro-multi-lang-v1_0/LICENSE.
+sherpa-onnx v1.13.8: Apache-2.0. https://github.com/k2-fsa/sherpa-onnx/tree/v1.13.8
+ONNX Runtime: MIT. https://github.com/microsoft/onnxruntime
+eSpeak NG data: GPL-3.0. https://github.com/espeak-ng/espeak-ng
+This app bundles native libraries and English voice data; no system TTS configuration required.
+
+QR scanner: ZXing Android Embedded 4.3.0 and ZXing Core 3.4.1, Apache-2.0. https://github.com/journeyapps/zxing-android-embedded
+AndroidX Activity 1.9.3, Apache-2.0. https://developer.android.com/jetpack/androidx/releases/activity

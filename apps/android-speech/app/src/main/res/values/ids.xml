@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <item name="pageToolbar" type="id" />
+    <item name="sbRate" type="id" />
+    <item name="tvRateAmount" type="id" />
+    <item name="btnRateNormal" type="id" />
+    <item name="btnRate125" type="id" />
+</resources>

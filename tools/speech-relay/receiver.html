@@ -1,0 +1,147 @@
+<!doctype html>
+<html lang="zh-CN">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="referrer" content="no-referrer">
+<title>青简 · 手机朗读</title>
+<style>
+:root{color-scheme:light dark;--bg:#f5f6f1;--card:#fff;--ink:#243328;--muted:#677469;--line:#dce3d8;--green:#376743}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.7 system-ui,sans-serif}main{max-width:620px;padding:32px 20px 60px;margin:auto}header{border-bottom:1px solid var(--line);padding-bottom:20px}small,.muted{color:var(--muted)}h1{font-size:30px;letter-spacing:-1px;margin:8px 0}h2{font-size:17px;margin:0 0 12px}section{padding:22px;margin-top:20px;background:var(--card);border:1px solid var(--line);border-radius:16px}button,select,input{font:inherit}button{min-height:46px;border:1px solid var(--line);border-radius:9px;padding:8px 16px;background:transparent;color:inherit;cursor:pointer}button.primary{background:var(--green);color:white;border-color:var(--green)}button:disabled{opacity:.45;cursor:default}.actions{display:flex;gap:10px;flex-wrap:wrap}.status{margin:14px 0 0;font-size:14px}#word{font-size:32px;line-height:1.4;overflow-wrap:anywhere;margin:8px 0 20px}label{display:block;margin:18px 0 6px;font-size:14px}select{width:100%;min-height:44px;border:1px solid var(--line);border-radius:8px;background:var(--card);color:inherit;padding:6px}input[type=range]{width:100%;accent-color:var(--green)}.address{display:block;overflow-wrap:anywhere;color:var(--green);font-size:13px;margin:10px 0 6px}footer{font-size:13px;color:var(--muted);margin-top:24px}#pairing[hidden]{display:none}button:focus-visible,select:focus-visible{outline:3px solid #8ab88a;outline-offset:3px}
+@media(prefers-color-scheme:dark){:root{--bg:#152119;--card:#1d2d22;--ink:#e1ebdf;--muted:#a0b29f;--line:#354b39;--green:#91c590}button.primary{color:#152119}}
+</style>
+<main>
+<header><small>青简 / 按需发音</small><h1>把英文，听进耳朵里。</h1><div class="muted">耳机连接手机。在电脑候选窗点击小喇叭，即可在这里朗读。</div></header>
+<section id="pairing" hidden><h2>连接你的手机</h2><p id="pairing-hint" class="muted">电脑与安卓手机连接同一局域网。在手机浏览器打开下面的完整地址，再启用朗读。</p><div id="addresses"></div></section>
+<section><h2>手机接收</h2><div class="actions"><button id="start" class="primary" disabled>启用朗读</button><button id="stop" disabled>暂停接收</button></div><p id="status" class="status" role="status" aria-live="polite">正在读取英文语音…</p><label for="voice">英文音色</label><select id="voice" aria-label="英文音色"></select><p id="voice-hint" class="muted">正在检测浏览器提供的音色…</p><div class="actions"><button id="test-voice" disabled>试播英文</button><button id="refresh-voices" disabled>重新检测音色</button></div><label for="rate">语速 <output id="speed">0.9×</output></label><input id="rate" type="range" min="0.5" max="1.3" step="0.1" value="0.9"></section>
+<section><small>最近一次朗读</small><p id="word">等待点击小喇叭</p><button id="replay" disabled>再听一次</button></section>
+<footer>请保持此页在前台。切到后台或锁屏后暂停接收，返回后可重新启用。<br>只接收你主动点击的英文，不记录输入历史。语音是否联网取决于手机所选语音引擎。</footer>
+</main>
+<script src="/qrcode.js"></script>
+<script>
+'use strict';
+const token = location.hash.slice(1);
+const el = id => document.getElementById(id);
+const synth = window.speechSynthesis;
+const speechSupported = !!(synth && typeof synth.speak==='function' && typeof synth.getVoices==='function' && window.SpeechSynthesisUtterance);
+let voices = [], active = false, after = 0, controller = null, lastText = '', generation = 0, currentSpeech = null;
+function status(text) { el('status').textContent = text; }
+async function api(path, signal) {
+  const response = await fetch(path, {headers:{Authorization:'Bearer '+token},cache:'no-store',signal});
+  const data = await response.json();
+  if (!response.ok) { const error=new Error(data.error || '连接失败'); error.status=response.status; throw error; }
+  return data;
+}
+function populateVoices() {
+  if(!speechSupported) return;
+  const selected = el('voice').value;
+  voices = synth.getVoices().filter(voice => /^en(?:[-_]|$)/i.test(voice.lang));
+  voices.sort((a,b) => Number(b.localService)-Number(a.localService));
+  el('voice').replaceChildren();
+  const automatic = document.createElement('option');
+  automatic.value='auto'; automatic.textContent='系统自动选择英文';
+  el('voice').append(automatic);
+  voices.forEach((voice,index) => {
+    const option = document.createElement('option');
+    option.value = String(index);
+    option.textContent = voice.name+' · '+voice.lang+(voice.localService?' · 本机语音':' · 可能联网');
+    el('voice').append(option);
+  });
+  el('voice').value = selected==='auto' || (selected!=='' && voices[Number(selected)]) ? selected : voices.length?'0':'auto';
+  el('start').disabled = !token || active;
+  el('test-voice').disabled=false; el('refresh-voices').disabled=false;
+  el('voice-hint').textContent=voices.length?'已检测到 '+voices.length+' 个英文音色。':'浏览器暂未列出英文音色，可用“系统自动选择英文”试播。系统试听正常而此页无声时，请换用独立 Chrome 或 Edge 浏览器。';
+}
+function say(text) {
+  if(!speechSupported) throw new Error('此浏览器不支持语音朗读，请使用独立 Chrome 或 Edge 浏览器。');
+  const voice = el('voice').value==='auto' ? null : voices[Number(el('voice').value)];
+  currentSpeech=null;
+  synth.cancel();
+  const utterance = new SpeechSynthesisUtterance(text);
+  if(voice) utterance.voice = voice;
+  utterance.lang = voice?.lang || 'en-US'; utterance.rate = Number(el('rate').value);
+  currentSpeech=utterance;
+  utterance.onerror = event => {
+    if(utterance!==currentSpeech || ['canceled','interrupted'].includes(event.error)) return;
+    stop('浏览器语音播放失败（'+event.error+'）。若系统英文试听正常，请换用独立 Chrome 或 Edge 后重试。');
+  };
+  utterance.onstart=()=>{if(utterance===currentSpeech) status(active?'正在朗读。':'正在试播英文，请确认能否听到声音。');};
+  utterance.onend=()=>{if(utterance===currentSpeech) {currentSpeech=null;status(active?'接收已启用，等待电脑点击小喇叭。':'试播已结束；听到声音后可以启用朗读。');}};
+  synth.speak(utterance);
+}
+function stop(message='已暂停接收') {
+  active=false; generation++; controller?.abort(); currentSpeech=null; synth?.cancel();
+  el('start').disabled=!token || !speechSupported; el('stop').disabled=true; status(message);
+}
+async function listen(run) {
+  while(active && run===generation) {
+    controller=new AbortController();
+    try {
+      const data=await api('/api/events?after='+after,controller.signal);
+      if(!active || run!==generation) return;
+      if(Number.isSafeInteger(data.sequence) && data.sequence>after) {
+        after=data.sequence;
+        if(typeof data.text==='string' && data.text.trim()) {
+          lastText=data.text; el('word').textContent=lastText; el('replay').disabled=false;
+          say(lastText); status('已收到，正在朗读。');
+        }
+      }
+    } catch(error) {
+      if(!active || run!==generation) return;
+      if(error.status===401) { stop(error.message); return; }
+      status('连接中断，正在重试…');
+      await new Promise(resolve=>setTimeout(resolve,1500));
+    }
+  }
+}
+el('start').onclick=async()=>{
+  if(active) return;
+  try {
+    populateVoices();
+    active=true; const run=++generation;
+    el('start').disabled=true; el('stop').disabled=false;
+    say('Ready');
+    const data=await api('/api/status');
+    if(!active || run!==generation) return;
+    after=data.sequence; status('接收已启用，等待电脑点击小喇叭。');
+    listen(run);
+  } catch(error) { stop(error.message); }
+};
+el('stop').onclick=()=>stop();
+el('test-voice').onclick=()=>{try{populateVoices();say('Hello. English speech is ready.');}catch(error){stop(error.message);}};
+el('refresh-voices').onclick=()=>{populateVoices();if(!active) status('音色已重新检测，请点击“试播英文”。');};
+el('replay').onclick=()=>{try{say(lastText);}catch(error){status(error.message);}};
+el('rate').oninput=()=>el('speed').textContent=el('rate').value+'×';
+document.addEventListener('visibilitychange',()=>{
+  if(document.hidden && active) stop('页面已进入后台，接收已暂停；返回后请重新启用。');
+  if(!document.hidden) populateVoices();
+});
+if(!speechSupported) status('此浏览器不支持语音朗读，请使用独立 Chrome 或 Edge 浏览器。');
+else {
+  synth.addEventListener('voiceschanged',populateVoices); populateVoices();
+  status(token?'准备就绪，可先试播英文，再启用朗读。':'请使用电脑配对页提供的完整地址。');
+  let attempts=0;
+  const voiceRetry=setInterval(()=>{populateVoices();if(voices.length || ++attempts>=8) clearInterval(voiceRetry);},1000);
+}
+if(token) api('/api/status').then(data=>{
+  if(!['127.0.0.1','localhost'].includes(location.hostname)) return;
+  el('pairing').hidden=false;
+  const urls=data.public_url ? [data.public_url+'/#'+token] : data.addresses.map(address=>'http://'+address+':'+location.port+'/#'+token);
+  if(data.public_url) el('pairing-hint').textContent=data.persistent?'Tailscale 连接已启用。手机和电脑须连接同一 Tailscale 网络；完整地址在重启后保留，主动重置配对除外。':'公网连接已启用，手机可使用其他 Wi-Fi 或移动网络。请打开下面的完整地址；重启连接工具后地址会变化。';
+  for(const url of urls) {
+    if(url.startsWith('https://')) {
+      const qr=qrcode(0,'M'); qr.addData(url); qr.make();
+      const code=new DOMParser().parseFromString(qr.createSvgTag({cellSize:5,margin:20}),'image/svg+xml').documentElement;
+      code.setAttribute('role','img'); code.setAttribute('aria-label','用青简朗读 App 扫码连接');
+      code.style.cssText='display:block;width:280px;max-width:100%;height:auto;background:white;margin:12px auto';
+      const hint=document.createElement('p'); hint.textContent='手机打开青简朗读 App → 扫码连接。二维码含配对凭证，请勿公开。';
+      el('addresses').append(code,hint);
+    }
+    const link=document.createElement('a'); link.href=url; link.className='address'; link.textContent=url;
+    const copy=document.createElement('button'); copy.textContent='复制手机连接地址';
+    copy.onclick=async()=>{try{await navigator.clipboard.writeText(url);copy.textContent='已复制';}catch{status('请选中上方地址复制。');}};
+    el('addresses').append(link,copy);
+  }
+  if(!urls.length) el('addresses').textContent='未检测到局域网地址，请确认电脑已经联网。';
+}).catch(error=>status(error.message));
+</script>
+</html>

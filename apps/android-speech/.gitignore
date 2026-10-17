@@ -1,0 +1,11 @@
+.gradle/
+.idea/
+.kotlin/
+.downloads/
+local.properties
+*.jks
+*.keystore
+**/build/
+app/libs/*.aar
+app/src/main/assets/kitten-nano-en-v0_1-fp16/
+app/src/main/assets/kokoro-multi-lang-v1_0/
