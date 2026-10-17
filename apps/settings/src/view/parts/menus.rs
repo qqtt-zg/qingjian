@@ -3,7 +3,7 @@
 use bamboo_slip::taffy::NodeId;
 use bamboo_slip::{Menu, RenderError, Ui};
 use qingjian_core::TraditionalVariant;
-use qingjian_platform::{EmojiCount, Scheme};
+use qingjian_platform::{EmojiCount, NumpadDigit, Scheme};
 
 use crate::message::{Message, Popup};
 use crate::view::Page;
@@ -19,6 +19,8 @@ pub fn anchor(popup: Popup) -> &'static str {
         Popup::Emoji => "emoji",
         Popup::Kaomoji => "kaomoji",
         Popup::Symbols => "symbols",
+        Popup::SpeechVoice => "speech-voice",
+        Popup::NumpadDigit => "numpad-digit",
     }
 }
 
@@ -32,12 +34,51 @@ pub fn menu(
     let Some(rect) = ui.rect(ui.key(anchor(popup))) else {
         return Ok(None);
     };
+    if popup == Popup::SpeechVoice {
+        let state = &page.settings.speech.state;
+        let labels: Vec<&str> = state
+            .choices
+            .iter()
+            .map(|(_, label)| label.as_str())
+            .collect();
+        let selected = state
+            .choices
+            .iter()
+            .position(|(key, _)| *key == state.selected);
+        let keys: Vec<String> = state.choices.iter().map(|(key, _)| key.clone()).collect();
+        return Menu::new(&labels, selected, rect, window)
+            .build(
+                ui,
+                &page.theme,
+                "speech-menu",
+                move |index| Message::Speech("select", Some(keys[index].clone())),
+                Message::CloseMenu,
+            )
+            .map(Some);
+    }
     let general = &page.settings.config.general;
     let strings = |values: Vec<String>| -> Vec<toml_edit::Value> {
         values.into_iter().map(toml_edit::Value::from).collect()
     };
     let (key, labels, values, selected): (&str, Vec<String>, Vec<toml_edit::Value>, Option<usize>) =
         match popup {
+            Popup::SpeechVoice => unreachable!("手机音色菜单已在前面处理"),
+            Popup::NumpadDigit => (
+                "numpad_digit",
+                NumpadDigit::ALL
+                    .iter()
+                    .map(|mode| mode.label().to_owned())
+                    .collect(),
+                strings(
+                    NumpadDigit::ALL
+                        .iter()
+                        .map(|mode| mode.key().to_owned())
+                        .collect(),
+                ),
+                NumpadDigit::ALL
+                    .iter()
+                    .position(|mode| *mode == general.numpad_digit),
+            ),
             Popup::Font => {
                 let families = page.settings.fonts.as_deref().unwrap_or_default();
                 let labels = std::iter::once("系统字体".to_owned())

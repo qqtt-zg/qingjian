@@ -1,4 +1,4 @@
-//! 组句中「修饰键 + 数字」的快捷键：上屏译词、删候选。与 macOS 壳对齐。
+//! 组句中「修饰键 + 数字」的快捷键：朗读英文、上屏译词、删候选。
 
 use qingjian_core::{Candidate, CandidateList};
 use qingjian_platform::protocol::KeyModifiers;
@@ -7,7 +7,7 @@ use super::Effect;
 use crate::dispatch::Router;
 
 impl Router {
-    /// 配到哪组就上屏第一 / 第二个译词或删候选；哪组都不是返回 `None`，按普通键处理。
+    /// 配到哪组就朗读、上屏译词或删候选；哪组都不是返回 `None`，按普通键处理。
     pub(super) fn apply_digit_shortcut(
         &mut self,
         digit: usize,
@@ -15,6 +15,10 @@ impl Router {
     ) -> Option<Effect> {
         if chord == KeyModifiers::default() {
             return None;
+        }
+        if chord == self.config.speech_keys {
+            self.speak_candidate(digit - 1);
+            return Some(Effect::Navigated);
         }
         let (first, second) = self.config.translation_keys;
         let effect = if chord == first {

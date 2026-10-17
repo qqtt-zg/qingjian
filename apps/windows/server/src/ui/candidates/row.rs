@@ -49,6 +49,7 @@ pub(crate) fn from_candidate(
         code,
         annotation,
         cloud: candidate.kind == CandidateKind::Cloud,
+        speakable: candidate.speech_text().is_some(),
     }
 }
 
@@ -113,5 +114,24 @@ mod tests {
                 .collect();
             assert_eq!(joined, "develop");
         }
+    }
+
+    #[test]
+    fn english_candidate_is_speakable_with_or_without_chinese_gloss() {
+        let mut candidate = candidate_with_gloss();
+        candidate.kind = CandidateKind::English;
+        candidate.text = "control".to_owned();
+        candidate.translation = Some(Translation::new(
+            Language::Chinese,
+            vec![Sense {
+                part_of_speech: Some(PartOfSpeech::Verb),
+                text: "控制".to_owned(),
+                reading: None,
+                fresh: false,
+            }],
+        ));
+        assert!(from_candidate(0, &candidate, false, true).speakable);
+        candidate.translation = None;
+        assert!(from_candidate(0, &candidate, false, true).speakable);
     }
 }

@@ -3593,7 +3593,7 @@ dependencies = [
 
 [[package]]
 name = "qingjian-settings"
-version = "0.2.1-dev"
+version = "0.2.2-dev"
 dependencies = [
  "bamboo-slip",
  "cosmic-text",

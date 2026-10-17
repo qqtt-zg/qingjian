@@ -10,6 +10,7 @@ mod layout;
 mod list;
 mod part_of_speech;
 mod sense;
+mod speech;
 mod translation;
 
 use serde::{Deserialize, Serialize};

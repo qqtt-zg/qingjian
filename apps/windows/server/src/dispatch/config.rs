@@ -2,7 +2,7 @@ use qingjian_core::TraditionalVariant;
 use qingjian_platform::protocol::KeyModifiers;
 use qingjian_platform::{
     Appearance, AppsConfig, CandidateRenderer, Config, FontSize, HighlightKeys, KeyCombo,
-    LayoutMode, PageKeys, PreeditMode, Scheme, SwitchKeys,
+    LayoutMode, NumpadDigit, PageKeys, PreeditMode, Scheme, SwitchKeys,
 };
 
 use super::RenderSettings;
@@ -25,6 +25,9 @@ pub struct RouterConfig {
     /// 中文模式下 Shift+字母收进组句缓冲区（`[general] shift_letter = "compose"`）。
     /// 关着（缺省）时壳把大写字母交给应用，与以前一致。
     pub shift_letter_compose: bool,
+
+    /// 中文组句中小键盘数字选候选还是直接输入。
+    pub numpad_digit: NumpadDigit,
 
     /// 候选排布（`[general] layout`）。
     pub layout: LayoutMode,
@@ -103,6 +106,9 @@ pub struct RouterConfig {
     /// 上屏第一 / 第二个译词的修饰键（`[shortcut] translation` / `translation_second`）。
     pub translation_keys: (KeyModifiers, KeyModifiers),
 
+    /// 朗读当前页候选英文的修饰键；空组合关闭。
+    pub speech_keys: KeyModifiers,
+
     /// 删候选的修饰键（`[shortcut] delete_candidate`）。
     pub delete_keys: KeyModifiers,
 
@@ -169,6 +175,7 @@ impl From<&Config> for RouterConfig {
             cloud_enabled: config.predict.enabled,
             sentence_translation: config.predict.sentence_translation,
             shift_letter_compose: config.general.shift_letter.compose(),
+            numpad_digit: config.general.numpad_digit,
             layout: config.general.layout,
             horizontal_grid: config.general.horizontal_grid,
             appearance: config.general.appearance(),
@@ -201,6 +208,7 @@ impl From<&Config> for RouterConfig {
                 (first.into(), second.into())
             },
             delete_keys: config.shortcut.delete_keys().into(),
+            speech_keys: config.shortcut.speech_keys().into(),
             translate_selection: config.shortcut.translate_selection,
             predict: config.shortcut.predict,
             status_enabled: config.status_bar.enabled,

@@ -30,15 +30,36 @@ fn resolve(vk: u32, state: &[u8; 256], layout: HKL) -> Option<char> {
 mod tests {
     use super::*;
     use windows::Win32::UI::Input::KeyboardAndMouse::{
-        KLF_NOTELLSHELL, LoadKeyboardLayoutW, VK_NUMLOCK, VK_SHIFT,
+        GetKeyboardLayoutList, VK_NUMLOCK, VK_SHIFT,
     };
-    use windows::core::w;
+
+    fn loaded_layouts() -> Vec<HKL> {
+        let count = unsafe { GetKeyboardLayoutList(None) };
+        assert!(count > 0);
+        let mut layouts = vec![HKL::default(); count as usize];
+        let copied = unsafe { GetKeyboardLayoutList(Some(&mut layouts)) };
+        assert!(copied > 0);
+        layouts.truncate(copied as usize);
+        layouts
+    }
+
+    fn existing_layout(id: u32) -> HKL {
+        assert_eq!(
+            std::env::var("QINGJIAN_ISOLATED_KEYBOARD_TESTS").as_deref(),
+            Ok("1"),
+            "真实键盘状态测试只能在专用 Windows 测试环境中显式开启"
+        );
+        loaded_layouts()
+            .into_iter()
+            .find(|layout| layout.0 as usize as u32 == id)
+            .unwrap_or_else(|| panic!("测试环境须预先配置布局 {id:08x}；测试不会自动加载"))
+    }
 
     #[test]
+    #[ignore = "需要隔离 Windows 环境和预先配置的美式、德语布局"]
     fn punctuation_and_digits_follow_layout() {
-        // 不加 KLF_ACTIVATE，不切换用户正在使用的布局。
-        let us = unsafe { LoadKeyboardLayoutW(w!("00000409"), KLF_NOTELLSHELL) }.unwrap();
-        let de = unsafe { LoadKeyboardLayoutW(w!("00000407"), KLF_NOTELLSHELL) }.unwrap();
+        let us = existing_layout(0x04090409);
+        let de = existing_layout(0x04070407);
         let mut state = [0; 256];
         assert_eq!(resolve(0xBA, &state, us), Some(';'));
         assert_eq!(resolve(0x32, &state, de), Some('2'));
@@ -54,8 +75,9 @@ mod tests {
     /// 小键盘数字与运算符也要能解出字符：V 模式（表达式模式）里敲小键盘才会进缓冲区。
     /// 关掉 NumLock 时系统上报的 vk 是导航键（VK_INSERT / VK_END…），到不了这里。
     #[test]
+    #[ignore = "需要隔离 Windows 环境和预先配置的美式布局"]
     fn keypad_digits_and_operators_resolve() {
-        let us = unsafe { LoadKeyboardLayoutW(w!("00000409"), KLF_NOTELLSHELL) }.unwrap();
+        let us = existing_layout(0x04090409);
         let mut state = [0; 256];
         state[VK_NUMLOCK.0 as usize] = 0x01;
         for (vk, expected) in [
@@ -80,8 +102,9 @@ mod tests {
     }
 
     #[test]
+    #[ignore = "修改 dead key 状态，仅在预先配置国际键盘的隔离 Windows 环境运行"]
     fn dead_key_lookup_does_not_change_next_character() {
-        let intl = unsafe { LoadKeyboardLayoutW(w!("00020409"), KLF_NOTELLSHELL) }.unwrap();
+        let intl = existing_layout(0xf0010409);
         let state = [0; 256];
         for _ in 0..2 {
             assert_eq!(resolve(0xDE, &state, intl), None);
@@ -108,6 +131,18 @@ mod tests {
     }
 
     #[test]
+    fn current_layout_lookup_keeps_loaded_layouts_unchanged() {
+        let before = loaded_layouts();
+        let current = unsafe { GetKeyboardLayout(0) };
+        let state = [0; 256];
+        for key in [0x31, 0x32, 0xBA, 0xDE] {
+            let _ = resolve(key, &state, current);
+        }
+        assert_eq!(loaded_layouts(), before);
+    }
+
+    #[test]
+    #[ignore = "切换真实键盘状态，仅在隔离 Windows 环境显式运行"]
     fn event_reads_thread_layout_and_keyboard_state() {
         use crate::com::key::event::to_key_event;
         use crate::com::service::TextService;
@@ -118,15 +153,18 @@ mod tests {
         use windows::Win32::UI::TextServices::ITfKeyEventSink;
         use windows::core::ComObject;
 
+        let layouts = [
+            (existing_layout(0x04090409), '+'),
+            (existing_layout(0x04070407), '*'),
+        ];
         let original_layout = unsafe { GetKeyboardLayout(0) };
         let mut original_state = [0; 256];
         unsafe { GetKeyboardState(&mut original_state) }.unwrap();
-        // 仅修改测试线程；即使断言失败，也先恢复布局和按键状态。
+        // 隔离环境中才允许切换；即使断言失败，也先恢复布局和按键状态。
         let result = std::panic::catch_unwind(|| {
             let service = ComObject::new(TextService::new());
             let sink: ITfKeyEventSink = service.to_interface();
-            for (name, expected) in [(w!("00000409"), '+'), (w!("00000407"), '*')] {
-                let layout = unsafe { LoadKeyboardLayoutW(name, KLF_NOTELLSHELL) }.unwrap();
+            for (layout, expected) in layouts {
                 unsafe { ActivateKeyboardLayout(layout, Default::default()) }.unwrap();
                 let mut state = [0; 256];
                 state[VK_SHIFT.0 as usize] = 0x80;

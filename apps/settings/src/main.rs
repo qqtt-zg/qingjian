@@ -62,9 +62,11 @@ fn init_logging() {
 
 fn run() -> Result<(), Box<dyn std::error::Error>> {
     let mut config = paths::config_path();
+    let mut speech = false;
     let mut args = std::env::args().skip(1);
     while let Some(arg) = args.next() {
         match arg.as_str() {
+            "--speech" => speech = true,
             "--config" => config = args.next().map(PathBuf::from),
             "--png" => {
                 let directory = args.next().map(PathBuf::from).ok_or("--png 后面要给目录")?;
@@ -78,7 +80,10 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
         return Ok(());
     }
     let config = config.ok_or("找不到配置文件的位置")?;
-    let settings = Settings::load(config)?;
+    let mut settings = Settings::load(config)?;
+    if speech && crate::support::Feature::PhoneSpeech.here() {
+        settings.page = crate::page_id::PageId::Speech;
+    }
     let mut options = WindowOptions::new("青简设置", (900.0, 680.0));
     options.min_size = (640.0, 420.0);
     run_window(settings, options)?;

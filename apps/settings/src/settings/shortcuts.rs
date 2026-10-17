@@ -18,6 +18,13 @@ impl Settings {
         self.write("shortcut", "question", defaults.mode.question.to_string());
         self.write("shortcut", "question_mark", defaults.mode.question_mark);
         self.write("shortcut", "translation", defaults.translation.key());
+        if Feature::PhoneSpeech.here() {
+            self.write(
+                "shortcut",
+                "speak_candidate",
+                defaults.speak_candidate.key(),
+            );
+        }
         self.write(
             "shortcut",
             "translation_second",

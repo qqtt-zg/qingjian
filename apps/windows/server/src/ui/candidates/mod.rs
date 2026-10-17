@@ -16,9 +16,9 @@ use windows::Win32::Graphics::Gdi::{GetDC, ReleaseDC};
 use windows::Win32::UI::HiDpi::{GetDpiForSystem, GetDpiForWindow};
 use windows::Win32::UI::WindowsAndMessaging::{
     CreateWindowExW, DefWindowProcW, DestroyWindow, IDC_ARROW, KillTimer, LoadCursorW, MSG,
-    SW_HIDE, SW_SHOWNA, SetTimer, ShowWindow, WM_LBUTTONDOWN, WM_MOUSEACTIVATE, WM_NCHITTEST,
-    WM_TIMER, WNDCLASSEXW, WS_EX_LAYERED, WS_EX_NOACTIVATE, WS_EX_TOOLWINDOW, WS_EX_TOPMOST,
-    WS_POPUP,
+    SW_HIDE, SW_SHOWNA, SetTimer, ShowWindow, WM_CAPTURECHANGED, WM_LBUTTONDOWN, WM_LBUTTONUP,
+    WM_MOUSEACTIVATE, WM_MOUSEMOVE, WM_NCHITTEST, WM_SETCURSOR, WM_TIMER, WNDCLASSEXW,
+    WS_EX_LAYERED, WS_EX_NOACTIVATE, WS_EX_TOOLWINDOW, WS_EX_TOPMOST, WS_POPUP,
 };
 use windows::core::{Error, PCWSTR, Result, w};
 
@@ -39,6 +39,9 @@ static CLASS: WindowClass = WindowClass::new();
 
 /// 动画定时器的 id（间隔按渲染器给的 `next_frame`；系统定时器精度约 15.6 ms）。
 const ANIMATION_TIMER: usize = 1;
+
+/// `TrackMouseEvent(TME_LEAVE)` 的通知值；SDK 将常量放在可选 Controls 模块。
+const MOUSE_LEAVE: u32 = 0x02A3;
 
 /// 光标行与候选窗之间的间隙（逻辑像素）。
 const CARET_GAP: i32 = 2;
@@ -127,7 +130,11 @@ impl CandidateWindow {
 
     /// 刷新内容（不定位、不显示）。
     pub(crate) fn set_content(&self, frame: &Frame, mode: Mode) {
+        let rows = self.data.borrow().rows.clone();
         self.data.borrow_mut().set(frame, mode);
+        if self.data.borrow().rows != rows {
+            click::cancel_press();
+        }
     }
 
     /// 按光标矩形定位并显示：贴光标下方（放不下放上方），四周留出阴影。
@@ -165,8 +172,8 @@ impl CandidateWindow {
                 );
                 self.position.set(position);
                 self.schedule(rendered.next_frame);
-                click::set_hits(rendered.hits.clone(), (content_x, content_y));
-                layered::present(self.hwnd, &rendered.pixmap, position)
+                click::set_rendered(&rendered, position, self.dark.get());
+                click::present(self.hwnd)
             }
             None => {
                 click::set_hits(Vec::new(), (0, 0));
@@ -229,7 +236,8 @@ impl CandidateWindow {
             self.stop_animation();
             return;
         };
-        let _ = layered::present(self.hwnd, &rendered.pixmap, self.position.get());
+        click::set_rendered(&rendered, self.position.get(), self.dark.get());
+        let _ = click::present(self.hwnd);
         self.schedule(rendered.next_frame);
     }
 
@@ -337,9 +345,26 @@ unsafe extern "system" fn wndproc(hwnd: HWND, msg: u32, wparam: WPARAM, lparam: 
         WM_NCHITTEST => click::hit_test(lparam),
         WM_MOUSEACTIVATE => click::mouse_activate(),
         WM_LBUTTONDOWN => {
-            click::button_down();
+            click::button_down(hwnd);
             LRESULT(0)
         }
+        WM_LBUTTONUP => {
+            click::button_up(hwnd);
+            LRESULT(0)
+        }
+        WM_MOUSEMOVE => {
+            click::mouse_move(hwnd);
+            LRESULT(0)
+        }
+        MOUSE_LEAVE => {
+            click::mouse_leave(hwnd);
+            LRESULT(0)
+        }
+        WM_CAPTURECHANGED => {
+            click::capture_changed(hwnd);
+            LRESULT(0)
+        }
+        WM_SETCURSOR if click::set_cursor() => LRESULT(1),
         _ => unsafe { DefWindowProcW(hwnd, msg, wparam, lparam) },
     }
 }

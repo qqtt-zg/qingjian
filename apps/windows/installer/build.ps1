@@ -66,7 +66,13 @@ $runtimeStage = Join-Path $Repo 'target\installer\settings-runtime'
 $runtimeList  = Join-Path $PSScriptRoot 'settings-runtime.txt'
 # 清单是 UTF-8 且带中文注释：不指定编码时 PowerShell 5.1 按 GBK 读，注释末尾的字节会吞掉换行，紧跟其后的一项被当成注释漏掉。
 $wanted = Get-Content $runtimeList -Encoding UTF8 | Where-Object { $_ -and -not $_.StartsWith('#') } | ForEach-Object { $_.Trim() }
-if (Test-Path $runtimeStage) { Remove-Item $runtimeStage -Recurse -Force }
+$runtimeStage = [IO.Path]::GetFullPath($runtimeStage)
+$expectedRuntimeStage = [IO.Path]::GetFullPath((Join-Path $Repo 'target\installer\settings-runtime'))
+if ($runtimeStage -ne $expectedRuntimeStage) { throw '运行时暂存目录不在预期工作区内' }
+if (Test-Path -LiteralPath $runtimeStage) {
+    if ((Get-Item -LiteralPath $runtimeStage).Attributes -band [IO.FileAttributes]::ReparsePoint) { throw '运行时暂存目录不能是目录链接' }
+    Remove-Item -LiteralPath $runtimeStage -Recurse -Force
+}
 New-Item -ItemType Directory -Path $runtimeStage -Force | Out-Null
 $missing = @()
 foreach ($name in $wanted) {

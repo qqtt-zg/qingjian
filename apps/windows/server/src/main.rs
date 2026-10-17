@@ -238,6 +238,12 @@ fn main() {
     dispatch::attach_cloud(&mut engine, &config.predict, usage_path);
     let router_config = RouterConfig::from(&config);
     let mut router = Router::new(engine, router_config.clone());
+    if let Some(path) = user_dir().map(|dir| dir.join("speech/connection.toml")) {
+        match qingjian_windows_server::speech::SpeechSender::new(path) {
+            Ok(sender) => router.set_speech_sink(Box::new(sender)),
+            Err(error) => tracing::warn!(%error, "手机朗读发送线程启动失败"),
+        }
+    }
     let model_path = dispatch::find_model(user_dir().as_deref(), &root);
     router.configure_local_model(model_path.clone(), &config.model);
     router.configure_code_table(dispatch::find_code_table(user_dir().as_deref(), &root));

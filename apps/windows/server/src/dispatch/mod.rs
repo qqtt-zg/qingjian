@@ -41,6 +41,7 @@ use self::rescore::{ModelLoader, RescoreState};
 use self::session::SessionInfo;
 pub use self::status::{NoopStatusSink, StatusEvent, StatusSink, StatusView};
 use self::translate::Translation;
+use crate::speech::SpeechSink;
 
 /// 学习数据落盘间隔（与 macOS 壳一致）；Server 没有定时器，借消息节拍看时间。
 const LEARNING_FLUSH_INTERVAL: Duration = Duration::from_secs(60);
@@ -97,6 +98,9 @@ pub struct Router {
 
     /// 候选窗口输出端；Windows 上由 [`crate::ui`] 注入。
     candidates: Box<dyn CandidateSink>,
+
+    /// 只在用户点喇叭时提交译词；网络发送由独立线程完成。
+    speech: Option<Box<dyn SpeechSink>>,
 
     /// 悬浮状态条输出端；Windows 上由 [`crate::ui`] 注入。
     status: Box<dyn StatusSink>,
@@ -170,6 +174,7 @@ impl Router {
             last_flush: Instant::now(),
             reload: None,
             candidates: Box::new(NoopSink),
+            speech: None,
             status: Box::new(NoopStatusSink),
             english,
             mode_session: None,
@@ -221,6 +226,10 @@ impl Router {
     pub fn set_candidate_sink(&mut self, sink: Box<dyn CandidateSink>) {
         sink.configure(self.config.render_settings());
         self.candidates = sink;
+    }
+
+    pub fn set_speech_sink(&mut self, sink: Box<dyn SpeechSink>) {
+        self.speech = Some(sink);
     }
 
     /// 直接碰 Engine：测试里改模式键这类启动时才设的开关。

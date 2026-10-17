@@ -2,10 +2,15 @@
 
 use qingjian_platform::{
     Appearance, CandidateRenderer, Config, DEFAULT_ENGLISH_CANDIDATES_ON_WINDOWS, EmojiCount,
-    HighlightKeys, LayoutMode, LogLevel, PreeditMode, ShiftLetter, UpdateChannel,
+    HighlightKeys, LayoutMode, LogLevel, NumpadDigit, PreeditMode, ShiftLetter, UpdateChannel,
 };
 use qingjian_render::ThemeLibrary;
-use windows_reactor::*;
+use windows_reactor::{
+    Component, ComponentContext, ElementRef, KeyedView, NavigationView,
+    NavigationViewBackButtonVisible, NavigationViewItem, NavigationViewItemSlot,
+    NavigationViewPaneDisplayMode, NavigationViewSlot, SlotView, SlotsControl, Symbol, SymbolIcon,
+    View, ViewContext,
+};
 
 use super::cloud_status::CloudStatus;
 use super::controls::{export_logs, log_dir, open_in_editor, open_with_explorer};
@@ -25,7 +30,12 @@ impl Component for Settings {
         Self {
             config,
             path,
-            page: "general".to_string(),
+            page: if std::env::args().any(|arg| arg == "--speech") {
+                "speech"
+            } else {
+                "general"
+            }
+            .to_string(),
             cloud_status: CloudStatus::Idle,
             recorder: Recorder::Idle,
             record_box: ElementRef::new(),
@@ -79,6 +89,9 @@ impl Component for Settings {
             Message::EnglishCandidates(on) => self.save("general", "english_candidates", on),
             Message::EnglishInChinese(on) => self.save("general", "english_in_chinese", on),
             Message::ChineseFirst(on) => self.save("general", "chinese_first", on),
+            Message::NumpadDigit(Some(i)) if i < NumpadDigit::ALL.len() => {
+                self.save("general", "numpad_digit", NumpadDigit::ALL[i].key());
+            }
             Message::FullWidthPunctuation(on) => {
                 self.save("general", "full_width_punctuation", on);
             }
@@ -415,6 +428,7 @@ impl Component for Settings {
             item("candidates", "候选窗口", Symbol::View),
             item("shortcut", "快捷键", Symbol::Keyboard),
             item("cloud", "云服务", Symbol::World),
+            item("speech", "手机朗读", Symbol::Audio),
             item("fuzzy", "模糊音", Symbol::Audio),
             item("dictionaries", "词库", Symbol::Library),
             item("aux_code", "辅码", Symbol::Character),

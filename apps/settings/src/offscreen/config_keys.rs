@@ -231,6 +231,23 @@ fn every_key_the_settings_app_writes_is_read_by_the_ime() {
             harness.apply(vec![Message::Recorded(shortcut, press.clone())]);
         }
     }
+    if crate::support::Feature::PhoneSpeech.here() {
+        harness.apply(vec![Message::Recorded(
+            Shortcut::SpeakCandidate,
+            KeyPress::new(
+                KeyCode::Character("1".to_owned()),
+                Modifiers {
+                    control: true,
+                    ..Modifiers::default()
+                },
+            ),
+        )]);
+        assert!(harness.checked.contains_key("[shortcut] speak_candidate"));
+        harness.apply(vec![Message::Recorded(
+            Shortcut::SpeakCandidate,
+            KeyPress::new(KeyCode::Backspace, Modifiers::default()),
+        )]);
+    }
     let _ = std::fs::remove_dir_all(&dir);
     assert!(
         harness.problems.is_empty(),
@@ -244,4 +261,10 @@ fn every_key_the_settings_app_writes_is_read_by_the_ime() {
         harness.checked.len(),
         harness.checked.keys()
     );
+    if crate::support::Feature::NumpadDigit.here() {
+        assert!(
+            harness.checked.contains_key("[general] numpad_digit"),
+            "小键盘下拉菜单必须实际写入并回读配置"
+        );
+    }
 }

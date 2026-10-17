@@ -2,7 +2,9 @@
 
 mod scenes;
 
-use qingjian_render::{FontLibrary, HitRegion, HitTarget, Layout, Renderer, Theme};
+use qingjian_render::{
+    FontLibrary, Frame, HitRegion, HitTarget, Layout, Renderer, Row, Theme, Tone,
+};
 
 fn region(hits: &[HitRegion], target: HitTarget) -> HitRegion {
     *hits
@@ -77,6 +79,105 @@ fn candidates_and_their_translations_are_clickable() {
                 "{what}"
             );
             assert_eq!(rendered.hit_at(-1.0, -1.0), None, "{what}");
+        }
+    }
+}
+
+#[test]
+fn speaker_has_its_own_hit_region_without_covering_translation() {
+    let library = FontLibrary::system("zh-CN").expect("需要系统字体验证喇叭布局");
+    let mut renderer = Renderer::new(library);
+    let mut frame = scenes::nihao();
+    frame.rows[0].speakable = true;
+    for dark in [false, true] {
+        let theme = if dark { Theme::dark() } else { Theme::light() };
+        for scale in [1.0, 1.5, 2.0] {
+            for layout in [Layout::Vertical, Layout::Horizontal] {
+                let rendered = renderer.render(&frame, layout, &theme, scale).unwrap();
+                let speaker = region(&rendered.hits, HitTarget::Speak(0));
+                let (x, y) = center(speaker, scale);
+                assert_eq!(rendered.hit_at(x, y), Some(HitTarget::Speak(0)));
+                assert!(speaker.width >= 18.0 * scale);
+                assert!(speaker.height >= 16.0 * scale);
+                let mut hovered = rendered.clone();
+                hovered.speaker_feedback(0, false, dark);
+                let mut pressed = rendered.clone();
+                pressed.speaker_feedback(0, true, dark);
+                assert_ne!(hovered.pixmap.data(), rendered.pixmap.data());
+                assert_ne!(pressed.pixmap.data(), hovered.pixmap.data());
+                assert_eq!(hovered.hits, rendered.hits);
+                assert_eq!(
+                    pressed.content_size_points(),
+                    rendered.content_size_points()
+                );
+                let translation = region(
+                    &rendered.hits,
+                    HitTarget::Translation {
+                        candidate: 0,
+                        sense: 0,
+                    },
+                );
+                assert!(translation.x + translation.width <= speaker.x);
+                let (x, y) = center(translation, scale);
+                assert_eq!(rendered.hit_at(x, y), Some(translation.target));
+                assert!(
+                    !rendered
+                        .hits
+                        .iter()
+                        .any(|hit| hit.target == HitTarget::Speak(1))
+                );
+            }
+        }
+    }
+}
+
+#[test]
+fn english_speaker_is_clickable_even_without_annotation() {
+    let library = FontLibrary::system("zh-CN").expect("需要系统字体验证喇叭布局");
+    let mut renderer = Renderer::new(library);
+    for annotation in [vec![("控制".to_owned(), Tone::Gloss)], Vec::new()] {
+        let mut row = Row::plain(0, "control");
+        row.annotation = annotation;
+        row.speakable = true;
+        let frame = Frame {
+            rows: vec![row, Row::plain(1, "🎛️")],
+            highlighted: Some(0),
+            ..Frame::default()
+        };
+        for name in [
+            "qingjian",
+            "system-blue",
+            "wechat",
+            "sakura",
+            "miku",
+            "bocchi",
+            "dafeiyu",
+        ] {
+            for dark in [false, true] {
+                let theme = Theme::builtin(name, dark).unwrap();
+                for layout in [Layout::Vertical, Layout::Horizontal] {
+                    let rendered = renderer.render(&frame, layout, &theme, 1.5).unwrap();
+                    let speaker = region(&rendered.hits, HitTarget::Speak(0));
+                    assert_eq!(
+                        rendered
+                            .hits
+                            .iter()
+                            .filter(|hit| hit.target == HitTarget::Speak(0))
+                            .count(),
+                        1
+                    );
+                    let (x, y) = center(speaker, rendered.scale);
+                    assert_eq!(rendered.hit_at(x, y), Some(HitTarget::Speak(0)));
+                    assert!(speaker.width >= 18.0 * rendered.scale);
+                    assert!(speaker.height >= 16.0 * rendered.scale);
+                    assert!(
+                        !rendered
+                            .hits
+                            .iter()
+                            .any(|hit| hit.target == HitTarget::Speak(1))
+                    );
+                }
+            }
         }
     }
 }

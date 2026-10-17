@@ -78,6 +78,21 @@ Source: "{#Repo}\target\release\qingjian-settings-legacy.exe"; DestDir: "{app}";
 ; 文件由 build.ps1 按 settings-runtime.txt 从 target\release 挑进 target\installer\settings-runtime，必须与 exe 同级。
 Source: "{#Repo}\target\installer\settings-runtime\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
 Source: "{#Repo}\apps\windows\tsf\resources\qingjian.ico"; DestDir: "{app}"; Flags: ignoreversion
+; —— 个人版手机朗读：只带运行文件，不带配对凭证、配置、缓存或测试数据 ——
+Source: "{#Repo}\tools\speech-relay\server.py"; DestDir: "{app}\tools\speech-relay"; Flags: ignoreversion
+Source: "{#Repo}\tools\speech-relay\desktop.py"; DestDir: "{app}\tools\speech-relay"; Flags: ignoreversion
+Source: "{#Repo}\tools\speech-relay\speech_control.py"; DestDir: "{app}\tools\speech-relay"; Flags: ignoreversion
+Source: "{#Repo}\tools\speech-relay\voice_packs.py"; DestDir: "{app}\tools\speech-relay"; Flags: ignoreversion
+Source: "{#Repo}\tools\speech-relay\app_updates.py"; DestDir: "{app}\tools\speech-relay"; Flags: ignoreversion
+Source: "{#Repo}\tools\speech-relay\update_http.py"; DestDir: "{app}\tools\speech-relay"; Flags: ignoreversion
+Source: "{#Repo}\tools\speech-relay\pairing.py"; DestDir: "{app}\tools\speech-relay"; Flags: ignoreversion
+Source: "{#Repo}\tools\speech-relay\tailscale_link.py"; DestDir: "{app}\tools\speech-relay"; Flags: ignoreversion
+Source: "{#Repo}\tools\speech-relay\tunnel.py"; DestDir: "{app}\tools\speech-relay"; Flags: ignoreversion
+Source: "{#Repo}\tools\speech-relay\receiver.html"; DestDir: "{app}\tools\speech-relay"; Flags: ignoreversion
+Source: "{#Repo}\tools\speech-relay\start.ps1"; DestDir: "{app}\tools\speech-relay"; Flags: ignoreversion
+Source: "{#Repo}\tools\speech-relay\README.md"; DestDir: "{app}\tools\speech-relay"; Flags: ignoreversion
+Source: "{#Repo}\tools\speech-relay\vendor\*"; DestDir: "{app}\tools\speech-relay\vendor"; Flags: ignoreversion
+Source: "{#Repo}\target\tools\cloudflared.exe"; DestDir: "{app}\tools"; Flags: ignoreversion
 ; —— 随包生成数据（只装运行时要的 .qj / .tsv，不装 dev 中间产物）——
 Source: "{#Repo}\data\generated\dict.qj";        DestDir: "{app}\data\generated";       Flags: ignoreversion
 Source: "{#Repo}\data\generated\lm.qj";          DestDir: "{app}\data\generated";       Flags: ignoreversion

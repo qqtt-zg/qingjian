@@ -34,6 +34,10 @@ pub struct ShortcutConfig {
     /// 数字键配这些修饰键：上屏候选的第二个译词（候选右侧有两个译词时）。
     pub translation_second: Modifiers,
 
+    /// Windows：数字键配这些修饰键朗读候选英文；空串关闭。
+    #[serde(with = "super::optional_modifiers")]
+    pub speak_candidate: Modifiers,
+
     /// 把应用里选中的文字译成学习语言（需要云服务开着）。
     pub translate_selection: KeyCombo,
 
@@ -59,6 +63,7 @@ impl Default for ShortcutConfig {
             extra_page_keys: PageKeys::default(),
             translation,
             translation_second,
+            speak_candidate: Modifiers::default(),
             translate_selection: KeyCombo::TRANSLATE_DEFAULT,
             predict: KeyCombo::PREDICT_DEFAULT,
             delete_candidate: Modifiers::SHIFT,
@@ -67,6 +72,19 @@ impl Default for ShortcutConfig {
 }
 
 impl ShortcutConfig {
+    /// 朗读不能覆盖译词上屏或删除；配置冲突时关闭朗读组合键。
+    pub fn speech_keys(&self) -> Modifiers {
+        let (first, second) = self.translation_keys();
+        if self.speak_candidate == first
+            || self.speak_candidate == second
+            || self.speak_candidate == self.delete_keys()
+        {
+            Modifiers::default()
+        } else {
+            self.speak_candidate
+        }
+    }
+
     /// 删候选的修饰键；为空或与任一组译词键撞了就退回缺省。
     pub fn delete_keys(&self) -> Modifiers {
         let (first, second) = self.translation_keys();
@@ -97,6 +115,33 @@ impl ShortcutConfig {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn speech_keys_round_trip_disabled_and_reject_conflicts() {
+        for source in ["", "speak_candidate = ''"] {
+            let config: ShortcutConfig = toml::from_str(source).unwrap();
+            assert!(config.speech_keys().is_empty());
+            let saved = toml::to_string(&config).unwrap();
+            assert_eq!(toml::from_str::<ShortcutConfig>(&saved).unwrap(), config);
+        }
+        let config: ShortcutConfig = toml::from_str(
+            "translation='shift'\ntranslation_second='ctrl+shift'\nspeak_candidate='ctrl'",
+        )
+        .unwrap();
+        assert_eq!(config.speech_keys(), Modifiers::CONTROL);
+        for conflict in [
+            config.translation,
+            config.translation_second,
+            config.delete_keys(),
+        ] {
+            let clashing = ShortcutConfig {
+                speak_candidate: conflict,
+                ..config
+            };
+            assert!(clashing.speech_keys().is_empty());
+        }
+        assert!(toml::from_str::<ShortcutConfig>("speak_candidate='bad-key'").is_err());
+    }
 
     #[test]
     fn optional_punctuation_and_extra_page_keys_round_trip() {

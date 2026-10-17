@@ -7,6 +7,7 @@ use qingjian_platform::{Config, KeyCombo, Modifiers};
 pub enum Shortcut {
     Translation,
     TranslationSecond,
+    SpeakCandidate,
     DeleteCandidate,
     TranslateSelection,
     Predict,
@@ -16,9 +17,10 @@ pub enum Shortcut {
 
 impl Shortcut {
     #[cfg(test)]
-    pub const ALL: [Self; 6] = [
+    pub const ALL: [Self; 7] = [
         Self::Translation,
         Self::TranslationSecond,
+        Self::SpeakCandidate,
         Self::DeleteCandidate,
         Self::TranslateSelection,
         Self::Predict,
@@ -29,6 +31,7 @@ impl Shortcut {
         match self {
             Self::Translation => "上屏第一个译词",
             Self::TranslationSecond => "上屏第二个译词",
+            Self::SpeakCandidate => "朗读候选英文",
             Self::DeleteCandidate => "删除候选",
             Self::TranslateSelection => "翻译选中文字",
             Self::Predict => "按需 AI 联想",
@@ -41,6 +44,7 @@ impl Shortcut {
         match self {
             Self::Translation => ("shortcut", "translation"),
             Self::TranslationSecond => ("shortcut", "translation_second"),
+            Self::SpeakCandidate => ("shortcut", "speak_candidate"),
             Self::DeleteCandidate => ("shortcut", "delete_candidate"),
             Self::TranslateSelection => ("shortcut", "translate_selection"),
             Self::Predict => ("shortcut", "predict"),
@@ -51,6 +55,7 @@ impl Shortcut {
     /// 录制时的提示。
     pub fn prompt(self) -> &'static str {
         match self {
+            Self::SpeakCandidate => "按住修饰键再按数字，Backspace 关闭",
             Self::Translation | Self::TranslationSecond | Self::DeleteCandidate => {
                 "按住修饰键再按个数字"
             }
@@ -66,6 +71,9 @@ impl Shortcut {
         match self {
             Self::Translation => digits(first),
             Self::TranslationSecond => digits(second),
+            Self::SpeakCandidate if shortcut.speak_candidate.is_empty() => "未设置".to_owned(),
+            Self::SpeakCandidate if shortcut.speech_keys().is_empty() => "冲突，未启用".to_owned(),
+            Self::SpeakCandidate => digits(shortcut.speech_keys()),
             Self::DeleteCandidate => digits(shortcut.delete_keys()),
             Self::TranslateSelection => combo_label(shortcut.translate_selection),
             Self::Predict => combo_label(shortcut.predict),
@@ -76,6 +84,9 @@ impl Shortcut {
     /// 按下的键能用就给出要写进配置的值，不能用给出原因（录制接着等）。
     pub fn accept(self, press: &KeyPress, config: &Config) -> Result<String, String> {
         let modifiers = modifiers(press);
+        if self == Self::SpeakCandidate && press.key == KeyCode::Backspace && modifiers.is_empty() {
+            return Ok(String::new());
+        }
         match self {
             Self::AuxCodeKey => {
                 let key = match &press.key {
@@ -108,7 +119,10 @@ impl Shortcut {
                 }
                 .key_string())
             }
-            Self::Translation | Self::TranslationSecond | Self::DeleteCandidate => {
+            Self::Translation
+            | Self::TranslationSecond
+            | Self::DeleteCandidate
+            | Self::SpeakCandidate => {
                 if modifiers.is_empty() {
                     return Err("要按住修饰键".to_owned());
                 }
@@ -118,6 +132,7 @@ impl Shortcut {
                     (Self::Translation, first),
                     (Self::TranslationSecond, second),
                     (Self::DeleteCandidate, shortcut.delete_keys()),
+                    (Self::SpeakCandidate, shortcut.speech_keys()),
                 ];
                 if let Some((other, _)) = others
                     .iter()
@@ -198,6 +213,39 @@ mod tests {
             alt: true,
             ..Held::default()
         }
+    }
+
+    #[test]
+    fn speech_recorder_detects_conflicts_and_can_be_cleared() {
+        let mut config = Config::default();
+        config.shortcut.translation = Modifiers::SHIFT;
+        config.shortcut.translation_second = Modifiers::SHIFT_CONTROL;
+        let control = Held {
+            control: true,
+            ..Held::default()
+        };
+        assert_eq!(
+            Shortcut::SpeakCandidate.accept(&press("1", control), &config),
+            Ok("control".to_owned())
+        );
+        config.shortcut.speak_candidate = Modifiers::CONTROL;
+        assert!(
+            Shortcut::DeleteCandidate
+                .accept(&press("1", control), &config)
+                .is_err()
+        );
+        let clear = KeyPress::new(KeyCode::Backspace, Held::default());
+        assert_eq!(
+            Shortcut::SpeakCandidate.accept(&clear, &config),
+            Ok(String::new())
+        );
+        config.shortcut.translation = Modifiers::CONTROL;
+        assert!(
+            Shortcut::SpeakCandidate
+                .accept(&press("1", control), &config)
+                .is_err()
+        );
+        assert_eq!(Shortcut::SpeakCandidate.current(&config), "冲突，未启用");
     }
 
     #[test]

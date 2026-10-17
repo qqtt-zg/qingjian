@@ -4,6 +4,7 @@ pub mod assembly;
 pub mod dispatch;
 pub mod error;
 pub mod ipc;
+pub mod speech;
 /// 候选窗口 / 状态条的自绘线程；仅 Windows。
 #[cfg(windows)]
 pub mod ui;

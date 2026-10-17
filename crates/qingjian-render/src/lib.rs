@@ -11,6 +11,7 @@ mod layout;
 pub mod preview;
 mod renderer;
 pub mod sample;
+mod speaker;
 mod theme;
 
 /// Windows 的字体登记：按字族名找文件、列字族名（设置页用）。

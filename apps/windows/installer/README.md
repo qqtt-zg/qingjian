@@ -62,6 +62,8 @@ AppModel API 把框架包加进进程包图，Windows 10 上没有那两个函�
 
 ## 打包（在编译机上）
 
+个人朗读修改版还带 `tools/speech-relay` 的运行脚本、扫码资源及 `tools/cloudflared.exe`；不带配对凭证、个人配置或缓存。该版本在本机使用已有 Python 3.10+ 和 Node.js，安装器不安装这些工具，也不自动启动隧道。Android App 单独安装，不并入 Windows 安装包。Windows 源码仍处于 `0.2.2-dev` 时保留开发版后缀，不冒充官方正式发布。
+
 ```powershell
 # 需要 MSVC 工具链 + Inno Setup。数据取自仓库 data\generated 与 assets，打包前先确保 .qj 是最新的。
 powershell -ExecutionPolicy Bypass -File apps\windows\installer\build.ps1

@@ -2,6 +2,7 @@
 
 use qingjian_core::{QUESTION_PREFIX, punctuation, shortcut};
 use qingjian_platform::HighlightKeys;
+use qingjian_platform::NumpadDigit;
 use qingjian_platform::protocol::KeyEvent;
 
 use super::{Effect, codes, with_prefix};
@@ -374,6 +375,18 @@ impl Router {
                 self.engine.push(c);
                 return Effect::Changed(None);
             }
+        }
+        // 只改普通中文组句；表达式、码点、问字与注音保留各自数字键语义。
+        if self.config.numpad_digit == NumpadDigit::Direct
+            && (0x60..=0x69).contains(&event.virtual_key)
+            && c.is_ascii_digit()
+            && !expression
+            && !self.engine.question_mode()
+            && !self.engine.is_zhuyin_mode()
+        {
+            self.engine.clear_aux();
+            self.engine.push(c);
+            return Effect::Changed(None);
         }
         // 辅码触发键：拼音打完整了、这个键也没被键盘方案吃掉 → 进辅码态（触发键不进缓冲区）
         if self.engine.aux_trigger(c) {

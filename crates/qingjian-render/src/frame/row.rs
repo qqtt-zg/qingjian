@@ -18,6 +18,9 @@ pub struct Row {
 
     /// 来自云联想：词前画一个小云朵，与本地候选区分。
     pub cloud: bool,
+
+    /// 这一行有可朗读的英文候选或译词；由平台决定是否提供朗读操作。
+    pub speakable: bool,
 }
 
 impl Row {
@@ -29,6 +32,7 @@ impl Row {
             code: None,
             annotation: Vec::new(),
             cloud: false,
+            speakable: false,
         }
     }
 }

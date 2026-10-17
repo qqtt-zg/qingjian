@@ -100,7 +100,10 @@ impl<'a> Context<'a> {
             match name {
                 "highlighted" => return self.frame.highlighted == Some(index),
                 "cloud" => return row.cloud,
-                "annotation" => return !self.matrix && !row.annotation.is_empty(),
+                // 朗读按钮也占 annotation 区，英文候选没有释义时仍要画出来。
+                "annotation" => {
+                    return !self.matrix && (!row.annotation.is_empty() || row.speakable);
+                }
                 "code" => return row.code.is_some(),
                 // 矩阵里按列算：每行的第一格、最后一格
                 "first" if self.matrix => return index % self.frame.columns == 0,
@@ -117,11 +120,14 @@ impl<'a> Context<'a> {
             "trailing.cloud" => frame.trailing().is_some_and(|(_, cloud)| cloud),
             "page" => frame.footer.is_some(),
             "candidates" => !frame.rows.is_empty(),
-            "annotations" => frame.rows.iter().any(|row| !row.annotation.is_empty()),
+            "annotations" => frame
+                .rows
+                .iter()
+                .any(|row| !row.annotation.is_empty() || row.speakable),
             "highlighted" => self.highlighted().is_some(),
             "highlighted.annotation" => self
                 .highlighted()
-                .is_some_and(|row| !row.annotation.is_empty()),
+                .is_some_and(|row| !row.annotation.is_empty() || row.speakable),
             "mode.english" => frame.mode.english,
             "mode.traditional" => frame.mode.traditional,
             "mode.full_width" => frame.mode.full_width,

@@ -77,6 +77,7 @@ pub fn annotated(index: usize, text: &str, annotation: &[(&str, Tone)], cloud: b
             .map(|(s, tone)| ((*s).to_owned(), *tone))
             .collect(),
         cloud,
+        speakable: false,
         code: None,
     }
 }

@@ -42,6 +42,33 @@ pub fn status_cells() -> Vec<StatusCell> {
     ]
 }
 
+/// 中文拼音态混排英文候选：有中文释义、无释义和 emoji 的朗读入口。
+pub fn english_speech() -> Frame {
+    let mut frame = nihao();
+    frame.preedit = Some(Preedit::plain("c'o'n't'r'o'l", 13));
+    frame.rows = vec![
+        Row::plain(0, "处哦那天热哦了"),
+        annotated(
+            1,
+            "control",
+            &[("v. ", Tone::Pos), ("控制", Tone::Gloss)],
+            false,
+        ),
+        annotated(2, "🎛️", &[("control", Tone::Gloss)], false),
+        annotated(
+            3,
+            "controlled",
+            &[("v. ", Tone::Pos), ("控制", Tone::Gloss)],
+            false,
+        ),
+        Row::plain(4, "controlling"),
+    ];
+    for index in [1, 3, 4] {
+        frame.rows[index].speakable = true;
+    }
+    frame
+}
+
 /// 带云联想的一页：整句补全与云端词各带云朵。
 pub fn cloud() -> Frame {
     let mut frame = nihao();

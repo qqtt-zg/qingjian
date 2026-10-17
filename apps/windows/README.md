@@ -13,6 +13,12 @@ Windows 端是**一个产品、两个产物**，各自一个 package，同放本
 应用进程 C ── qingjian_tsf.dll ─┘
 ```
 
+## 测试键盘布局时的系统边界
+
+常规 `cargo test` 不加载额外键盘布局。TSF 的四项真实布局 / 键盘状态集成测试默认忽略，断言保留；它们需要在专用 Windows 虚拟机或测试账户中预先配置美式、德语和美国英语国际键盘，再显式设置 `QINGJIAN_ISOLATED_KEYBOARD_TESTS=1` 并运行对应的 `--ignored` 用例。测试只枚举并复用已有布局，不调用 `LoadKeyboardLayoutW`；缺少环境开关或目标布局时明确失败。
+
+Windows 8 起，加载键盘布局可能影响整个会话；`KLF_NOTELLSHELL` 不等于隔离。不要在日常桌面上通过测试自动安装 / 加载语言或切换键盘状态。默认测试只核对当前布局的字符解析，并比较前后已加载布局列表没有改变。
+
 ## 为什么核心逻辑要在进程外
 
 Windows 的文本服务（TSF，Text Services Framework）是一个 COM DLL（`ITfTextInputProcessor`），

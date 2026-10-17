@@ -227,6 +227,29 @@ P2C 自由生成实验：`--eval-text <集> --eval-generate data/models/hanzhang
 画位图的部分已拆到自绘引擎 `crates/bamboo-slip`：下文的 `scene/`、`animation/`、`text/`、`fonts/`、`canvas.rs`、`shadow.rs`
 在 `crates/bamboo-slip/src/`，原 `renderer/{animate,retained,partial}.rs` 成了引擎的 `stage/`（`Stage::present` / `tick_at`），`theme/svg_image.rs` 成了 `SvgImage`。
 这里留下帧数据、主题格式、`renderer/build/` 建树、点击区域、状态条与云朵 / 齿轮图标（`icon/`，实现引擎的 `Icon` trait）。改了引擎回来跑本 crate 的快照测试。
+个人 Android 朗读接收端在 `apps/android-speech`，独立 Gradle 工程；沿用现有 HTTPS 配对与长轮询协议，KittenTTS nano / sherpa-onnx 依赖固定 SHA-256。只在手机端合成与归一化语音，通过前台服务、会话唤醒锁和短暂音频焦点适配 Android 生命周期，不进入输入内核。构建与真机验证边界见该目录 README。
+
+连接工具的 `-Tailscale` 模式使用 Serve 8443 专用端口与持久 `pairing.json`，接收 / 发布凭证分离并保存最后事件序号；重启保持 App 的完整地址与轮询进度。其他 Serve 路由及 Funnel 不覆盖，只有 `-ResetPairing` 才主动轮换已有配对凭证。
+
+Android 0.1.1 增加扫码连接，电脑配对页本地加载 MIT qrcode-generator 1.4.4 生成 HTTPS 完整地址二维码；App 使用内置 ZXing 4.3.0 接收结果并沿用 `Pairing.parse`。无效与取消结果不修改保存的地址。无需为扫码改变输入法协议或重新编译电脑输入法。
+
+Android 0.1.2 在 `BundledVoice.labels` 映射八个 Kitten nano 音色，`SpeechPlayer` 每次生成前读取并约束保存的 speaker ID。`Pcm` 支持最高 4 倍用户增强、最大 32 倍基础 RMS 归一化及软限幅；不改变系统媒体音量。设备测试可用 `-e voices true` 对八音色测量合成 RMS 与 200% / 400% 输出对比。
+
+Android 0.1.5 保持八项内置音色协议，将索引 1（电脑端「女声 1」）映射到 Kokoro af_heart 的上游 speaker ID 3，其他七项继续使用 Kitten。`BundledVoice.engineKey` 区分两个原生引擎，`SpeechPlayer` 按引擎键串行释放 / 重建，避免两模型的 speaker ID 混用；首次无选择时默认索引 1，已有选择保留。Kokoro 压缩包 URL / SHA-256 固定于 `dependencies.json`，准备脚本只取必需模型、英文词典、eSpeak 数据和许可，不带辅助脚本及其他语言词典。`-e heart true` 设备探针核对 af_heart 短词非静音与两个引擎往返播放；内置版不依赖音色包 HTTP 下载。
+
+Android 0.1.6 的 `SpeechPlayer` 在播放短音频前读取实际流缓冲区帧数（API 31 起同时读取起播阈值），不足时只补末尾零帧，非阻塞预填后再 `play`。等待播放进度有明确超时结果，不再把零进度当完成。可注入真实 AudioTrack 工厂以用较大缓冲区复现设备差异，`ShortAudioProbe` 验证 `control` / `control system` 的非静音输出与实际帧进度；不依赖修改系统音频设置或正式手机连接。
+
+Android 0.1.3 的播放焦点回调用 CAS 约束请求序号，旧播放的延迟焦点变化不取消新请求；合成非空与有效振幅先检查，异常显示阶段与类型。ReceiverService 分别保存不含正文的最近接收元信息与最后播放状态，MainActivity 展示两者。`-e playback true` 对八音色执行实际播放器测试，普通设备测试核对服务清理后仍保留所选音色诊断。
+
+个人版手机朗读管理：Windows Settings 的 `panel::speech` 是独立原生 Reactor 子组件，调用随包 `desktop.py` 的后台命令，展示本机二维码 PNG、手机回报和音色列表，不阻塞设置或输入线程。Python 发布凭证只允许本机管理，手机接收凭证仅能获取包 / 提交设备状态。Android 0.1.4 的 `PackTransfer` 校验 SHA-256 / 大小 / 路径并原子安装，`VoiceLibrary` 加载当前引擎兼容的 kitten / vits / kokoro 配置。原生模型切换和合成串行，失败回退内置；协议与验收见 [手机朗读控制](../design/speech-control.md)。
+
+个人版 Windows 安装器显式打入手机朗读运行脚本、二维码资源与已有官方签名的 cloudflared，排除配对文件、个人配置和缓存；本机 Python / Node.js 仍为外部运行前提。默认新版设置的版本跟随 Windows 产品 `0.2.2-dev`，安装包保留开发版标识。Windows App Runtime 暂存目录递归重建前核对工作区绝对路径并拒绝目录链接。
+
+同步 0.2.2-dev 主线后，默认设置的 `apps/settings` 也提供「手机朗读」页；`jobs::speech` 后台顺序调用相同辅助程序并每两秒轮询，待交付的操作结果不被状态轮询覆盖，测试配置不操作真实连接。二维码 PNG 在应用侧按模块实现 bamboo-slip 的 `Icon`，未向通用引擎加入输入法概念。候选喇叭也实现该 trait，布局与命中区域留在 `qingjian-render`，`Stage` 的动画和绘制逻辑沿用主线。
+
+个人修改版：Core 的 `Candidate::speech_text` 统一朗读正文，`English` 候选取自身文本，其他候选复用 `Translation::speech_text` 取英文译词；Windows 行适配与 Router 共用该判断。`Row::speakable` 在 annotation 正文列追加矢量喇叭，没有释义的英文候选仍保留该列，词性分列的主题只在正文列放按钮。产生优先命中的 `HitTarget::Speak`，不复用上屏区域；`Rendered::speaker_feedback` 在原图副本上画悬停 / 按下反馈，Windows 壳管手形光标、鼠标捕获与松开发送。朗读不受旧 DLL 鼠标上屏协议限制；后台 `SpeechSender` 按请求序号回报发送成败，Router 只更新尚在等待的朗读提示。连接工具支持局域网与 `-Internet` 临时 HTTPS 隧道；手机接收凭证与本机发布凭证分离，Rust 每次读取本机连接文件，无需直接访问公网。接收页空音色列表不禁用启动，以 `en-US` 请求系统自动选音色，支持手动检测、试播和语音错误暂停；协议与真机验收边界见 [按需朗读设计](../design/speech.md)。
+
+个人版候选朗读快捷键由 `[shortcut] speak_candidate` 配置修饰键，默认空串关闭，`optional_modifiers` 只对此可关闭字段接受空串，不放宽其他修饰键解析。`ShortcutConfig::speech_keys` 与译词上屏 / 删除键冲突时关闭朗读。Windows Router 在组句态接收主键盘 `1`～`9`，复用点击喇叭的发送方法，以当前页序号取词，限制页内范围，返回 `Navigated` 保持组句和高亮；空闲态放行。新版设置在 Windows 支持表的 `PhoneSpeech` 下提供录键、Backspace 清除与冲突提示，恢复默认关闭朗读组合键；不修改 TSF 协议。
 
 横排矩阵：视口与高亮移动在 Core `candidate::layout::Grid`（`GRID_ROWS` = 6，列宽 `Grid::column_ems` 按整份候选估、单格封顶 `MAX_CELL_EMS` = 4 字宽）。
 青简渲染器在 `renderer/build/matrix.rs` 画矩阵：`Frame.columns` 不为 0 时，横排模板里候选的 `repeat` 改包进一个网格（主题不另写模板），
@@ -333,6 +356,8 @@ PKG_CONFIG_PATH="$onig" PKG_CONFIG_ALLOW_CROSS=1 RUSTONIG_SYSTEM_LIBONIG=1 \
 
 ## apps/windows
 
+个人修改版整合 PR #354（`wxzhoulf/qingjian@68dfa3b`）：`[general] numpad_digit`（`NumpadDigit`）控制普通中文组句中的小键盘数字，`select`（缺省）选当前页候选，`direct` 将数字送入 Core 缓冲区并按输入顺序原样上屏。`RouterConfig::from` 同时供启动与热加载使用。新版设置「输入 → 数字输入」和旧版「通用 → 输入与候选」共用该枚举；新版在平台支持表登记为 Windows 专用。主键盘数字、英文、注音、表达式与问字模式沿用主线行为。新增按键回放覆盖 0–9、空格 / 回车、混输、翻译快捷键和导航键，热加载测试核对非法值保持原配置。
+
 用量接线：启动与配置热加载为 CloudPredictor 和 CloudGlossFiller 传同一个用户目录 `api-usage.json`；设置页的 ConnectionTest 使用该文件。统计页手动刷新读取累计记录，收到 JSON 响应与正文有效性分开统计；原译词自动补充、用户配置及学习文件沿用。
 
 云联想接线：Ctrl+Alt+J 由可配置 TSF 保留键转发到 Engine 显式入口；自动重组仍走原自动入口。Composed 记录待收手动序号并在输入重建／取消／收结果时清除；自动结果用末尾布局，手动结果用前置布局，导航后保持候选不变，本地重排沿用当前布局模式。应用前文继续用于两类请求，译词自动补充继续装配。设置沿用默认 300/3000 ms，不写入个人偏好。
@@ -367,6 +392,9 @@ Windows 的 `dispatch/mode` 管理可选的初始英文与按应用模式记忆�
 
 TSF 原有数字 / OEM 标点 / 空格键码按当前布局用 `ToUnicodeEx` 解析（bit 2 避免改变键盘状态），
 仅接受单个非代理项 UTF-16 单元。字母、小键盘和 AltGr 处理不变，不保证组合音符输入。
+
+键盘布局测试不再主动调用 `LoadKeyboardLayoutW`：常规测试只读当前布局并检查加载列表不变；四项需要美式 / 德语 / 国际键盘及真实状态切换的集成测试默认忽略，须在预先配置的隔离环境设置 `QINGJIAN_ISOLATED_KEYBOARD_TESTS=1` 后显式运行。缺少布局时失败，不自动给用户新增语言。`KLF_NOTELLSHELL` 不能阻止系统级布局残留。
+
 没在组句的数字在 `OnTestKeyDown` 先问 Server（`key_sink::preflight_digit`）：Passthrough 则 Test 不吃、键原生进应用
 （避免 `InsertTextAtSelection` 在未设 `KEYBOARD_DISABLED` 的 `IS_NUMERIC_PASSWORD` 框里倒序）；注音等 Consumed
 时把结果缓进 `pending_digit`，`OnKeyDown` 再应用。拼音显示位置（`[general] preedit`）在 Windows 上分两处落地：
@@ -447,3 +475,27 @@ Windows 可选的 `[shortcut] toggle_punctuation` 经 `InputSettings` 下发，�
 Unix socket 用共享长度前缀与 Frame（当前公共版本 8，与 `PROTOCOL_VERSION` 同步，Fcitx5 插件里写死在 `qingjian.cpp` 的 OpenSession）；插件复用一条连接，每个上下文独立会话。Linux v3 扩展逐会话握手、确认 Sensitive/Password/Disable 后接受按下/释放、焦点和点击事实。
 候选回报绑定连接代次、上下文和服务端帧序号，仅当前聚焦页的有效释义进入 `note_displayed`，不把生成帧算作已展示。
 `[general] preedit` 使用已有 `both` / `inline` / `window`；没有新增 Linux 自绘配置。详见 [linux-fcitx5.md](linux-fcitx5.md)。
+
+## Android 手机学习（个人版）
+
+0.2.10-dev 新增 `update/PackageDownload` 与 `UpdateFailure`，保留按哈希命名的 .part，4 MiB 分段续传/有限重试/暂停/速度反馈，错误分型并保留最终签名/哈希校验。电脑 `update_http.py` 提供受配对鉴权保护的 Range/ETag/HEAD，安装器需随带新脚本。隔离验证使用 `transfer/download_ui/updates` 与电脑测试。
+
+0.2.9-dev 新增 `learning/quiz`（笔记选择/拼写、唯一题目标识、错题重测）、`practice/PracticeStore` 与 `oral`（前台 AudioRecord WAV、私有保存/MediaPlayer 回放、自评）。SQLite v1→v2 只新增练习表，保留词汇、计数与对话；清空学习资料包括所属录音。无新依赖、录音上传或自动发音分数。用户选择预留自动评估，不接入收费服务。探针 `migration/practice/quiz/oral` 只用于隔离模拟器。
+
+0.2.8-dev 新增 `learning/StudyDirection` 与 `WordStudyActivity`，学习方向和双词语境辨析复用原答疑会话，选择入口只准备问题草稿，用户明确发送后才请求。该词的已保存讲解可离线回看，保留 SQLite v1 数据，无新增依赖。隔离模拟器 `-e study true` 验证从词汇进入、草稿/请求边界及离线持久化。
+
+0.2.7-dev 的 `update/` 按 SHA-256 隔离下载文件与安装 URI，检查到不同包或构建时清除旧 ready 标记，最终校验失败后恢复下载操作；更新页显示目标构建并提供重新下载。隔离模拟器 `-e updates true` 增加旧固定缓存拒绝、元数据变更失效和篡改缓存恢复的回归覆盖。
+
+0.2.6-dev 在 `learning/ai/SettingsActivity` 增加连接测试状态区、加载动画、阶段、耗时与取消按钮，保存提示独立显示，测试期间锁定配置编辑。`Client.complete` 用可选进度回调报告阶段，保持原答疑调用兼容；`AiConnectionProbe` 通过测试进程内受控 HTTPS 驱动真实 UI，无真实密钥或服务商请求。
+
+0.2.5-dev 新增 `rate/SpeechRate` 与 `RateControls`，原生合成读取持久化语速，默认 1.0 倍；`-e rate true` 用真实 Kokoro/Kitten 比较不同语速的音频时长。`Views.header/page` 统一子页返回箭头，`-e toolbar true` 验证五个子页的返回图标与点击导航；`settings` 同时覆盖语速保存和返回摘要同步。
+
+0.2.4-dev 的统一设置页仅保留连接操作和声音摘要，声音编辑/试听/手动地址保存只在朗读子页显示；`SettingsProbe` 检查可见控件不重叠与地址仅保存、返回刷新摘要，避免共用 XML 导致两层出现重复操作。
+
+0.2.3-dev 将底部入口收为「今日、词汇、复习、设置」四项，`MainActivity` 同时承载朗读和应用设置，`LearningActivity` 不再保留独立的「我的」页。低频子页返回文案与更新/AI/数据入口统一指向设置页。
+
+0.2.2-dev 的低频页面为 `SpeechSettingsActivity`（声音、手动配对、后台、诊断）和 `learning/DataSettingsActivity`（数据与关于）；普通朗读页隐藏低频分组并显示音色摘要与快捷试听。`-e settings true` 验证主/设置页的可见性、声音选项返回同步及跨页面清空复习状态，只在无个人数据的隔离模拟器运行。
+
+`apps/android-speech` 0.2.0-dev 增加 `learning/` 本机词汇与原生页面、`learning/ai/` HTTPS Chat Completions 配置与答疑。0.2.1-dev 使用 `Navigation` 共享五个底部标签，`MainActivity` 作为独立朗读页，切回学习页复用原活动与本轮复习状态；切换标签不启动或停止接收。第一阶段复用系统 SQLite，未新增依赖；Keystore AES-GCM 保护用户自带密钥。收到请求与播放器完整输出分开计数，试听不收录，中文笔记由用户确认。没有在后台自动请求 AI。数据与请求边界见 `docs/design/mobile-learning.md`，用法见 `docs/user/learning/mobile.md`。测试 `-e learning true` 仅在无个人数据的隔离模拟器运行。
+
+Android 构建 9 增加 `update/`：连接后异步检查，下载与安装前校验 SHA-256、大小、包名、versionCode 和当前签名，FileProvider 仅开放更新缓存目录。`tools/speech-relay/app_updates.py` 原子发布 ARM64 APK 和清单，服务通过受手机配对鉴权保护的 `/api/update` 提供版本与文件；`build.ps1 -PublishUpdate` 发布本机更新，模拟器构建不允许发布。Windows 安装器同步带入该脚本。测试使用 `test_app_updates.py` 与隔离模拟器 `-e updates true`，不操作真实配对或学习数据。

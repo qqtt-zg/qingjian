@@ -43,6 +43,9 @@ pub(super) struct Builder<'a> {
 
     /// 各候选译文里每条译词的片段节点（第几个候选，第几条，节点）。
     pub(super) sense_nodes: Vec<(usize, usize, NodeId)>,
+
+    /// 各行喇叭的独立点击区域，命中优先于候选与译词。
+    pub(super) speaker_nodes: Vec<(usize, NodeId)>,
 }
 
 impl Builder<'_> {

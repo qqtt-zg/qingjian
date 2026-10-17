@@ -7,13 +7,17 @@ use std::path::{Path, PathBuf};
 use std::time::Instant;
 
 use clap::Parser;
-use qingjian_render::{FontLibrary, Mode, Renderer, Theme};
+use qingjian_render::{FontLibrary, Layout, Mode, Renderer, Theme, Tone};
 
 #[path = "../tests/scenes/mod.rs"]
 mod scenes;
 
 #[derive(Parser)]
 struct Args {
+    /// 展示修改版候选译词旁的小喇叭。
+    #[arg(long)]
+    speech: bool,
+
     /// PNG 输出目录。
     #[arg(long, default_value = "target/render-preview")]
     out: PathBuf,
@@ -134,7 +138,27 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
         None => [("light", Theme::light()), ("dark", Theme::dark())],
     };
-    let samples = scenes::candidate_scenes();
+    let mut samples = scenes::candidate_scenes();
+    if args.speech {
+        for (_, frame, _) in &mut samples {
+            for row in &mut frame.rows {
+                row.speakable = row.annotation.iter().any(|(text, tone)| {
+                    matches!(tone, Tone::Gloss | Tone::Fresh)
+                        && text.bytes().any(|byte| byte.is_ascii_alphabetic())
+                });
+            }
+        }
+        samples.push((
+            "english-speech-vertical",
+            scenes::english_speech(),
+            Layout::Vertical,
+        ));
+        samples.push((
+            "english-speech-horizontal",
+            scenes::english_speech(),
+            Layout::Horizontal,
+        ));
+    }
     for (theme_name, theme) in &themes {
         for (scene, frame, layout) in &samples {
             let started = Instant::now();

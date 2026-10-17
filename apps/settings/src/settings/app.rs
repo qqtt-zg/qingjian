@@ -50,6 +50,9 @@ impl App for Settings {
                 if page == PageId::Stats {
                     self.stats = Some(Stats::load(&self.config.general));
                 }
+                if page == PageId::Speech {
+                    self.speech.poll(self.waker.clone());
+                }
             }
             Message::SystemCtrlSpace(on) => self.set_ctrl_space(on),
             Message::Record(shortcut) => self.recording = Some(shortcut),
@@ -136,6 +139,10 @@ impl App for Settings {
                 }
             }
             Message::Commit(id) => self.commit(id),
+            Message::Speech(action, value) => {
+                self.menu = None;
+                self.speech.run(action, value, self.waker.clone());
+            }
             Message::Cancel(id) => self.reset_field(id),
             Message::TestCloud => {
                 if !self.cloud_test.running() {
@@ -227,10 +234,14 @@ impl App for Settings {
 
     fn set_waker(&mut self, waker: Waker) {
         self.waker = Some(waker);
+        if self.page == PageId::Speech {
+            self.speech.poll(self.waker.clone());
+        }
     }
 
     fn wake(&mut self) -> bool {
         let mut changed = self.search.expire(Instant::now());
+        changed |= self.speech.finish();
         if let Some(text) = self.cloud_test.finish() {
             self.notice = Some(("cloud", text));
             changed = true;

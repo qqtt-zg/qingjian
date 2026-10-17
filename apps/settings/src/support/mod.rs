@@ -32,11 +32,15 @@ pub enum Feature {
     ApiUsage,
     /// Windows 的手动云联想与请求节奏设置。
     CloudRequestControls,
+    /// 个人版电脑与 Android 手机的朗读连接。
+    PhoneSpeech,
+    /// 中文组句中小键盘选候选或直接输入。
+    NumpadDigit,
 }
 
 impl Feature {
     #[cfg(test)]
-    pub const ALL: [Self; 14] = [
+    pub const ALL: [Self; 16] = [
         Self::AuxCode,
         Self::SwitchKeys,
         Self::DefaultEnglish,
@@ -51,6 +55,8 @@ impl Feature {
         Self::SystemTextReplacements,
         Self::ApiUsage,
         Self::CloudRequestControls,
+        Self::PhoneSpeech,
+        Self::NumpadDigit,
     ];
 
     /// 当前平台显示这一项。
@@ -91,6 +97,8 @@ impl Feature {
             // Linux 的输入法还没接云服务
             Self::ApiUsage => [Yes, Yes, Todo],
             Self::CloudRequestControls => [Todo, Yes, Todo],
+            Self::PhoneSpeech => [No, Yes, No],
+            Self::NumpadDigit => [No, Yes, No],
         }
     }
 
@@ -112,6 +120,8 @@ impl Feature {
             Self::SystemTextReplacements => "也用系统的文本替换",
             Self::ApiUsage => "云服务用量统计",
             Self::CloudRequestControls => "按需云联想与请求节奏",
+            Self::PhoneSpeech => "手机朗读",
+            Self::NumpadDigit => "小键盘数字用途",
         }
     }
 
@@ -138,6 +148,8 @@ impl Feature {
                 (PageId::Cloud, "最短请求间隔"),
                 (PageId::Shortcuts, "按需 AI 联想"),
             ],
+            Self::PhoneSpeech => &[],
+            Self::NumpadDigit => &[(PageId::Input, "小键盘数字")],
             Self::EnglishPunctuation | Self::StatusBar | Self::HorizontalGrid | Self::ApiUsage => {
                 &[]
             }

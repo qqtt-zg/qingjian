@@ -104,6 +104,13 @@ pub fn shortcuts(ui: &mut Ui<Message>, page: &Page) -> Result<Vec<NodeId>, Rende
             false,
         )?,
     ];
+    if Feature::PhoneSpeech.here() {
+        rows.insert(0, recorder(
+            ui, page, Shortcut::SpeakCandidate,
+            "按住修饰键再按当前页候选序号，只朗读英文、不上屏。先启动手机朗读连接；录制时按 Backspace 可关闭",
+            false,
+        )?);
+    }
     if Feature::CloudRequestControls.here() {
         rows.push(recorder(
             ui,

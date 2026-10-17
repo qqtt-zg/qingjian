@@ -10,4 +10,5 @@ pub mod input;
 pub mod language;
 pub mod phrases;
 pub mod shortcuts;
+pub mod speech;
 pub mod stats;

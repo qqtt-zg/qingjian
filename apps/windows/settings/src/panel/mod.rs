@@ -9,6 +9,7 @@ mod message;
 mod notice;
 mod pages;
 mod recorder;
+mod speech;
 mod system_hotkey;
 
 use std::path::{Path, PathBuf};
@@ -131,6 +132,7 @@ impl Settings {
 
     fn page_content(&self, context: &mut ViewContext<Self>) -> View {
         match self.page.as_str() {
+            "speech" => View::component::<speech::SpeechPane>(()),
             "candidates" => candidates::view(self, context),
             "shortcut" => shortcut::view(self, context),
             "cloud" => cloud::view(self, context),

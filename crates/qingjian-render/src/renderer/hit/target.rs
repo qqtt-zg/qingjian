@@ -2,6 +2,9 @@
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum HitTarget {
+    /// 只朗读这一页第 `n` 个候选的英文正文，不提交文本。
+    Speak(usize),
+
     /// 这一页第 `n` 个候选（从 0 起）。
     Candidate(usize),
 

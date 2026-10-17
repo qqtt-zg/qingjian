@@ -4,6 +4,7 @@ use bamboo_slip::{Painted, Pixmap};
 
 use super::{HitRegion, HitTarget};
 
+#[derive(Clone)]
 pub struct Rendered {
     /// 预乘 RGBA 位图，含阴影边。
     pub pixmap: Pixmap,

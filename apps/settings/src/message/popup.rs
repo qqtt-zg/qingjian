@@ -11,4 +11,6 @@ pub enum Popup {
     Emoji,
     Kaomoji,
     Symbols,
+    SpeechVoice,
+    NumpadDigit,
 }

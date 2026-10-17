@@ -75,6 +75,7 @@ impl QingjianInputController {
             return;
         }
         match target {
+            HitTarget::Speak(_) => {}
             HitTarget::Candidate(offset) => {
                 if let Some(index) = host::with(|h| h.session.index_in_view(offset)).flatten() {
                     self.commit_index(index, client);

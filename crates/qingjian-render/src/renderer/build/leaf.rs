@@ -5,6 +5,7 @@ use bamboo_slip::taffy::{Dimension, NodeId, Style};
 use super::layout_style;
 use super::{Builder, Context};
 use crate::frame::{Preedit, PreeditStyle, Tone};
+use crate::icon::Icon;
 use crate::theme::file::node::{BoxSpec, Direction, NodeKind, NodeSpec, ToneFilter};
 use bamboo_slip::RenderError;
 use bamboo_slip::{Decoration, Visual};
@@ -80,6 +81,13 @@ impl Builder<'_> {
                 };
                 // 挑完是空的也留着节点（与没有译文时一样）：主题写了高度就照样占住这一行，几列对得齐
                 let segments = pick_segments(segments, tones.as_deref(), *senses);
+                // 词性单独成列的主题只在正文列放喇叭，正文为空也保留朗读入口。
+                let speech_slot = *senses != Some(0)
+                    && tones.as_deref().is_none_or(|tones| {
+                        tones
+                            .iter()
+                            .any(|tone| matches!(tone, ToneFilter::Gloss | ToneFilter::Fresh))
+                    });
                 let stroke = self.stroke(stroke.as_ref(), ctx);
                 // 点译文上屏的是哪个候选的译词：候选那一列的是它自己，横排底下那行是高亮的那个
                 let candidate = match bind.as_str() {
@@ -110,6 +118,28 @@ impl Builder<'_> {
                         self.sense_nodes.push((candidate, sense, child));
                     }
                     children.push(child);
+                }
+                if let Some(candidate) = candidate
+                    && speech_slot
+                    && ctx
+                        .frame
+                        .rows
+                        .get(candidate)
+                        .is_some_and(|row| row.speakable)
+                {
+                    let mut icon_style = Style::default();
+                    icon_style.size.width = Dimension::length(20.0 * self.scale);
+                    icon_style.size.height = Dimension::length(18.0 * self.scale);
+                    icon_style.margin.left =
+                        bamboo_slip::taffy::LengthPercentageAuto::length(6.0 * self.scale);
+                    let visual = Visual::Icon {
+                        icon: Icon::Speaker.painter(),
+                        size: 14.0 * self.scale,
+                        color: self.color(faint, ctx),
+                    };
+                    let icon = self.scene.node(icon_style, visual, &[])?;
+                    self.speaker_nodes.push((candidate, icon));
+                    children.push(icon);
                 }
                 self.scene.node(
                     layout_style::flex(style, Direction::Row),

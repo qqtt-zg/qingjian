@@ -152,6 +152,7 @@ impl Router {
 
     /// 到点了：接上加载好的模型、推进重排、看一眼配置文件。工人循环超时与 DLL 的 `Poll` 都会调。
     pub fn tick(&mut self) {
+        self.poll_speech();
         self.attach_loaded_model();
         self.advance_rescoring();
         self.poll_config_reload();

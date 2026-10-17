@@ -1,6 +1,6 @@
 //! 「通用」页：学习语言、每页候选数、输入方案、英文模式候选。
 
-use qingjian_platform::{EmojiCount, MAX_PAGE_SIZE, Scheme, ShiftLetter, SwitchKey};
+use qingjian_platform::{EmojiCount, MAX_PAGE_SIZE, NumpadDigit, Scheme, ShiftLetter, SwitchKey};
 use windows_reactor::{
     Callback, CheckBox, ChildrenControl, ComboBox, ContentControl, NumberBox, Orientation,
     StackPanel, ToggleSwitch, View, ViewContext,
@@ -67,6 +67,18 @@ pub(crate) fn view(settings: &Settings, context: &mut ViewContext<Settings>) -> 
     let g = &settings.config.general;
     let english_only_in_apps = !settings.config.apps.english_candidates_everywhere();
     let rows = [
+        field(
+            "中文组句中的小键盘数字",
+            "选择候选（默认），或直接输入数字并与已敲内容一起上屏。主键盘数字仍选候选；英文、注音、表达式和问字模式不受影响。",
+            ComboBox::new()
+                .items_source(NumpadDigit::ALL.iter().map(|mode| mode.label()))
+                .selected_index(
+                    NumpadDigit::ALL
+                        .iter()
+                        .position(|mode| *mode == g.numpad_digit),
+                )
+                .on_selection_changed(context.callback(Message::NumpadDigit)),
+        ),
         field(
             "学习语言",
             "候选词右侧显示哪种语言的译词，只列出装了释义表的语言；「不显示译文」同时关掉生词标记与释义兜底。",
@@ -245,7 +257,7 @@ pub(crate) fn view(settings: &Settings, context: &mut ViewContext<Settings>) -> 
     page(
         "通用",
         StackPanel::new().spacing(24.0).children([
-            section("输入与候选", rows.by_ref().take(7)),
+            section("输入与候选", rows.by_ref().take(8)),
             section("标点", rows.by_ref().take(3)),
             section("中英文输入", rows.by_ref().take(9)),
             feedback(&settings.notice),

@@ -108,6 +108,9 @@ pub fn index(settings: &Settings) -> Vec<Entry> {
     };
     let mut entries = Vec::new();
     for id in PageId::ALL {
+        if id == PageId::Speech && !crate::support::Feature::PhoneSpeech.here() {
+            continue;
+        }
         entries.push(Entry {
             page: id,
             key: None,
@@ -144,6 +147,7 @@ fn page_children(
         PageId::Phrases => pages::phrases::phrases(ui, page)?,
         PageId::Dictionaries => pages::dictionaries::dictionaries(ui, page)?,
         PageId::Cloud => pages::cloud::cloud(ui, page)?,
+        PageId::Speech => pages::speech::speech(ui, page)?,
         PageId::Stats => pages::stats::stats(ui, page)?,
         PageId::Advanced => pages::advanced::advanced(ui, page)?,
         PageId::About => pages::about::about(ui, page)?,

@@ -80,6 +80,9 @@ fn navigation(ui: &mut Ui<Message>, page: &Page) -> Result<Vec<NodeId>, RenderEr
     ui.scope("nav", |ui| -> Result<Vec<NodeId>, RenderError> {
         let mut items = Vec::new();
         for id in PageId::ALL {
+            if id == PageId::Speech && !crate::support::Feature::PhoneSpeech.here() {
+                continue;
+            }
             let selected = id == page.settings.page;
             let mut item = NavItem::new(id.label())
                 .icon(Arc::new(id.glyph()))

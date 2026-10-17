@@ -3,7 +3,7 @@
 use bamboo_slip::taffy::LengthPercentage;
 use bamboo_slip::taffy::{Dimension, FlexDirection, FlexWrap, NodeId, Rect, Size, Style};
 use bamboo_slip::{Checkbox, RenderError, SettingRow, Switch, Ui, Visual, group, section_title};
-use qingjian_platform::Scheme;
+use qingjian_platform::{NumpadDigit, Scheme};
 
 use super::shortcuts;
 use crate::library::Kind;
@@ -75,6 +75,24 @@ pub fn input(ui: &mut Ui<Message>, page: &Page) -> Result<Vec<NodeId>, RenderErr
     );
     out.push(section_title(ui, theme, "方案")?);
     out.push(group(ui, theme, &rows)?);
+
+    if Feature::NumpadDigit.here() {
+        let choices: Vec<&str> = NumpadDigit::ALL.iter().map(|mode| mode.label()).collect();
+        let control = select(
+            ui,
+            page,
+            Popup::NumpadDigit,
+            (general.numpad_digit.label(), &choices),
+            180.0,
+            false,
+        )?;
+        let row = SettingRow::new("小键盘数字")
+            .info("中文组句中选择候选（默认），或将小键盘数字作为内容原样输入；主键盘上排数字仍选词。需要开启 Num Lock。")
+            .control(control)
+            .build(ui, theme)?;
+        out.push(section_title(ui, theme, "数字输入")?);
+        out.push(group(ui, theme, &[row])?);
+    }
 
     // 拼音关着时模糊音没有意义
     let pinyin_off = scheme == Scheme::Off;

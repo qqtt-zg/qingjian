@@ -20,6 +20,7 @@ use qingjian_render::{TextSizes, Theme, ThemeLibrary};
 
 use crate::jobs::cloud_test::CloudTest;
 use crate::jobs::import::ImportJob;
+use crate::jobs::speech::SpeechJob;
 use crate::jobs::update_check::UpdateCheck;
 use crate::library::Library;
 use crate::message::{FieldId, Popup, SizeKind};
@@ -81,6 +82,8 @@ pub struct Settings {
 
     pub import: ImportJob,
 
+    pub speech: SpeechJob,
+
     /// 开着的短语编辑卡片。
     pub phrase: Option<PhraseEditor>,
 
@@ -137,6 +140,10 @@ impl Settings {
             .inspect_err(|error| tracing::warn!(%error, "logo 解析失败"))
             .ok();
         Ok(Self {
+            speech: SpeechJob::new(
+                crate::support::Feature::PhoneSpeech.here()
+                    && paths::config_path().as_ref() == Some(&path),
+            ),
             path,
             config,
             themes,

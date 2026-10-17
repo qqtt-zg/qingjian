@@ -2,4 +2,5 @@
 
 pub mod cloud_test;
 pub mod import;
+pub mod speech;
 pub mod update_check;

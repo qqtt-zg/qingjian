@@ -62,6 +62,8 @@ pub enum Message {
     /// 表达式、问字两个模式键之一换成这个字母（撞了就对调）。
     ModeKey(&'static str, char),
     CheckUpdate,
+    /// 手机朗读辅助工具的动作；值为选择的音色或模型文件夹。
+    Speech(&'static str, Option<String>),
     /// 展开 / 收起「关于」页的数据来源。
     ToggleSources,
     /// 统计页切到「云服务」层（`false` 回「输入」层）。
