@@ -30,6 +30,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - `apps/linux`：`server`（Engine + Unix socket）+ `fcitx5`（框架事件、默认面板）+ `scripts`（用户级安装卸载、`package.sh` 打预编译包）；Server 手动启动，见 `docs/notes/linux-fcitx5.md`。
 - `tools/dict-convert`、`tools/gloss-gen`、`tools/corpus`：产品数据生成（词库 / 语言模型 / 释义表 / emoji / 英文词表），输出到 `data/generated/`（gitignore）。
 - `assets/`：随包数据源与样例，各目录有 README 写来源与许可。雾凇拼音（GPL）已彻底移除，不要再引入。
+- `target/`：Rust 编译缓存和打包中转；不要在这里保存工具、模拟器、备份或分发安装包。
+- `.local/`：本机工具、依赖下载、音色源、Android 模拟器、备份与诊断资料，不入 Git。
+- `dist/windows/`、`dist/android/`：Windows 安装器和 Android 构建脚本导出的分发包，不入 Git。目录约定见 `docs/notes/build-layout.md`。
 
 `docs/` 分四类（索引在 `docs/README.md`）：`design/` 设计与决定、`plan/` 路线与待办、`notes/` 工程记录（性能、复盘、踩坑、crate 实现要点）、
 `user/` 用户文档（官网构建时拉取渲染，约定见 `docs/user/README.md`，措辞面向用户、不出现实现词）。

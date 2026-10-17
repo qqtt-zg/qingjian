@@ -58,7 +58,9 @@ af_heart 需要完整 Kokoro 推理模型及英文发音数据；因此 APK 显�
 pwsh -File .\apps\android-speech\build.ps1 -Prepare
 ```
 
-本机已有依赖时可省略 `-Prepare`。输出 `app/build/outputs/apk/debug/app-debug.apk`。`-Abi x86_64` 仅用于模拟器。源代码依照仓库 GPL-3.0；模型为 Apache-2.0，原生依赖及数据的第三方说明位于 APK assets 中的 `THIRD-PARTY.txt`，App 内可以查看来源。
+本机已有依赖时可省略 `-Prepare`。未设置 `JAVA_HOME` 时自动使用仓库 `.local/tools/jdk17/` 下的 JDK 17；依赖下载缓存位于 `.local/downloads/android-speech/`。脚本将 APK 导出到 `dist/android/qingjian-learning-<版本>-build<构建号>-<ABI>.apk`；`app/build/outputs/apk/debug/app-debug.apk` 只作临时构建输出。`-Abi x86_64` 仅用于模拟器。源代码依照仓库 GPL-3.0；模型为 Apache-2.0，原生依赖及数据的第三方说明位于 APK assets 中的 `THIRD-PARTY.txt`，App 内可以查看来源。
+
+本机项目模拟器放在 `.local/android-avd/`，可用 `pwsh -File apps/android-speech/emulator.ps1 -List` 列出；不带参数启动 `QingjianLearning`，加 `-ColdBoot` 冷启动，`-Headless` 用于无窗口测试。脚本只为子进程指定 AVD 目录，不修改系统环境变量或其他模拟器。目录与清理约定见 [构建目录](../../docs/notes/build-layout.md)。
 
 ## 验证边界
 

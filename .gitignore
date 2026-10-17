@@ -1,4 +1,6 @@
 /target
+/.local/
+/dist/
 **/*.rs.bk
 .DS_Store
 *.app

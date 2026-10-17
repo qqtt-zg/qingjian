@@ -5,5 +5,5 @@ Served locally; no pairing data is sent to third-party QR services.
 
 cloudflared 2026.10.0, Apache-2.0.
 Source: https://github.com/cloudflare/cloudflared/tree/2026.10.0
-The Windows installer includes the existing official signed binary from target/tools/cloudflared.exe.
+The Windows installer includes the existing official signed binary from .local/tools/cloudflared.exe.
 License: CLOUDFLARED-LICENSE.txt.

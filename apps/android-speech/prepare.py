@@ -6,8 +6,8 @@ import tarfile
 import urllib.request
 
 root = Path(__file__).resolve().parent
-cache = root / ".downloads"
-cache.mkdir(exist_ok=True)
+cache = root.parent.parent / ".local/downloads/android-speech"
+cache.mkdir(parents=True, exist_ok=True)
 for item in json.loads((root / "dependencies.json").read_text()):
     target = cache / item["name"]
     if not target.exists():

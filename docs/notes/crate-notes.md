@@ -478,6 +478,8 @@ Unix socket 用共享长度前缀与 Frame（当前公共版本 8，与 `PROTOCO
 
 ## Android 手机学习（个人版）
 
+本机目录按 [构建目录](build-layout.md) 分开：`build.ps1` 从 `.local/tools/jdk17/` 找 JDK，将成品导出到 `dist/android/`，`-PublishUpdate` 发布这份持久副本；`prepare.py` 下载缓存位于 `.local/downloads/android-speech/`。`emulator.ps1` 为项目模拟器指定 `.local/android-avd/`，不更改全局 AVD 环境变量。桌面连接工具从 `.local/tools/cloudflared.exe` 查找仓库内工具，已安装布局仍读 `{app}/tools/cloudflared.exe`。Windows 安装器输出及发布上传同步改为 `dist/windows/`，运行时中转仍留在 `target/installer/settings-runtime/`。
+
 0.2.10-dev 新增 `update/PackageDownload` 与 `UpdateFailure`，保留按哈希命名的 .part，4 MiB 分段续传/有限重试/暂停/速度反馈，错误分型并保留最终签名/哈希校验。电脑 `update_http.py` 提供受配对鉴权保护的 Range/ETag/HEAD，安装器需随带新脚本。隔离验证使用 `transfer/download_ui/updates` 与电脑测试。
 
 0.2.9-dev 新增 `learning/quiz`（笔记选择/拼写、唯一题目标识、错题重测）、`practice/PracticeStore` 与 `oral`（前台 AudioRecord WAV、私有保存/MediaPlayer 回放、自评）。SQLite v1→v2 只新增练习表，保留词汇、计数与对话；清空学习资料包括所属录音。无新依赖、录音上传或自动发音分数。用户选择预留自动评估，不接入收费服务。探针 `migration/practice/quiz/oral` 只用于隔离模拟器。

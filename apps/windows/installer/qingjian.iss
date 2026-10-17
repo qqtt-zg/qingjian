@@ -50,7 +50,7 @@ MinVersion=10.0.17763
 PrivilegesRequired=admin
 ; 别让 Restart Manager 去关所有加载了 DLL 的应用（那是每一个有文本框的应用）。
 CloseApplications=no
-OutputDir={#Repo}\target\installer
+OutputDir={#Repo}\dist\windows
 OutputBaseFilename=qingjian-{#AppVersion}-windows-x86_64-setup
 SetupIconFile={#Repo}\apps\windows\tsf\resources\qingjian.ico
 UninstallDisplayIcon={app}\qingjian.ico
@@ -92,7 +92,7 @@ Source: "{#Repo}\tools\speech-relay\receiver.html"; DestDir: "{app}\tools\speech
 Source: "{#Repo}\tools\speech-relay\start.ps1"; DestDir: "{app}\tools\speech-relay"; Flags: ignoreversion
 Source: "{#Repo}\tools\speech-relay\README.md"; DestDir: "{app}\tools\speech-relay"; Flags: ignoreversion
 Source: "{#Repo}\tools\speech-relay\vendor\*"; DestDir: "{app}\tools\speech-relay\vendor"; Flags: ignoreversion
-Source: "{#Repo}\target\tools\cloudflared.exe"; DestDir: "{app}\tools"; Flags: ignoreversion
+Source: "{#Repo}\.local\tools\cloudflared.exe"; DestDir: "{app}\tools"; Flags: ignoreversion
 ; —— 随包生成数据（只装运行时要的 .qj / .tsv，不装 dev 中间产物）——
 Source: "{#Repo}\data\generated\dict.qj";        DestDir: "{app}\data\generated";       Flags: ignoreversion
 Source: "{#Repo}\data\generated\lm.qj";          DestDir: "{app}\data\generated";       Flags: ignoreversion

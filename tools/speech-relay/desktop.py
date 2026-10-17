@@ -87,7 +87,7 @@ def start():
         return
     cloudflared = shutil.which("cloudflared")
     here = Path(__file__).resolve()
-    for candidate in (here.parents[2] / "target/tools/cloudflared.exe", here.parents[1] / "cloudflared.exe"):
+    for candidate in (here.parents[2] / ".local/tools/cloudflared.exe", here.parents[1] / "cloudflared.exe"):
         if candidate.is_file():
             cloudflared = str(candidate)
             break

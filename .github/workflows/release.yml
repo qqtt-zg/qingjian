@@ -251,7 +251,7 @@ jobs:
       - name: Upload to draft release
         env:
           GH_TOKEN: ${{ github.token }}
-        run: tools/release/upload-build.sh windows "$(powershell -NoProfile -Command '(Get-CimInstance Win32_OperatingSystem).Caption' | tr -d '\r')" target/installer/*.exe
+        run: tools/release/upload-build.sh windows "$(powershell -NoProfile -Command '(Get-CimInstance Win32_OperatingSystem).Caption' | tr -d '\r')" dist/windows/*.exe
 
   linux:
     needs: prepare

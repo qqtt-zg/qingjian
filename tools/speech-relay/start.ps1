@@ -17,8 +17,12 @@ if ($Tailscale) {
 if ($ResetPairing) { $relayArguments += '--reset-pairing' }
 if ($Internet) {
     if (-not $Cloudflared) {
-        $bundledTool = Join-Path $PSScriptRoot '..\..\target\tools\cloudflared.exe'
-        $Cloudflared = if (Test-Path -LiteralPath $bundledTool) { $bundledTool } else { 'cloudflared' }
+        $bundledTools = @(
+            (Join-Path $PSScriptRoot '..\..\.local\tools\cloudflared.exe'),
+            (Join-Path $PSScriptRoot '..\cloudflared.exe')
+        )
+        $Cloudflared = $bundledTools | Where-Object { Test-Path -LiteralPath $_ -PathType Leaf } | Select-Object -First 1
+        if (-not $Cloudflared) { $Cloudflared = 'cloudflared' }
     }
     $relayArguments += @('--internet', '--cloudflared', $Cloudflared)
 }

@@ -70,7 +70,7 @@ pwsh -File .\tools\speech-relay\start.ps1 -Tailscale -ResetPairing
 
 电脑和手机不在同一局域网时，可通过 Cloudflare 官方 `cloudflared` 建立临时 HTTPS 连接。无需账号、域名或自备服务器；手机可使用其他 Wi-Fi 或移动网络。
 
-1. 从 [Cloudflare 官方下载页](https://developers.cloudflare.com/cloudflare-one/networks/connectors/cloudflare-tunnel/downloads/) 下载适合电脑的 `cloudflared`。Windows x64 可将可执行文件保存为仓库的 `target\tools\cloudflared.exe`，或将其放入 PATH。工具不会自动下载安装、修改 PATH 或安装系统服务。
+1. 从 [Cloudflare 官方下载页](https://developers.cloudflare.com/cloudflare-one/networks/connectors/cloudflare-tunnel/downloads/) 下载适合电脑的 `cloudflared`。Windows x64 可将可执行文件保存为仓库的 `.local\tools\cloudflared.exe`，或将其放入 PATH。工具不会自动下载安装、修改 PATH 或安装系统服务。
 2. 关闭旧的朗读连接工具，再执行：
 
    ```powershell
