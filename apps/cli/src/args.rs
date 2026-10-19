@@ -143,6 +143,11 @@ pub struct Args {
     #[arg(long, default_value_t = 6, requires = "mine_log")]
     pub mine_max_chars: usize,
 
+    /// 把过阈值的**全拼**行直接并进用户词（配 --mine-log）：给了 --user-dict 写回同目录的
+    /// user-words.tsv，不给则只打印预演；简拼行单独列出等人工补读音
+    #[arg(long, requires = "mine_log")]
+    pub mine_apply: bool,
+
     /// 回放 / 整句评测时打印前 N 条没命中首选的例子
     #[arg(long, default_value_t = 20)]
     pub misses: usize,

@@ -14,12 +14,13 @@ pub enum PageId {
     Cloud,
     Speech,
     Stats,
+    Vocabulary,
     Advanced,
     About,
 }
 
 impl PageId {
-    pub const ALL: [Self; 12] = [
+    pub const ALL: [Self; 13] = [
         Self::Input,
         Self::Candidates,
         Self::Language,
@@ -30,6 +31,7 @@ impl PageId {
         Self::Cloud,
         Self::Speech,
         Self::Stats,
+        Self::Vocabulary,
         Self::Advanced,
         Self::About,
     ];
@@ -46,6 +48,7 @@ impl PageId {
             Self::Cloud => "云服务",
             Self::Speech => "手机朗读",
             Self::Stats => "统计",
+            Self::Vocabulary => "生词本",
             Self::Advanced => "高级",
             Self::About => "关于",
         }
@@ -63,6 +66,7 @@ impl PageId {
             Self::Cloud => Glyph::Cloud,
             Self::Speech => Glyph::Language,
             Self::Stats => Glyph::Stats,
+            Self::Vocabulary => Glyph::Vocabulary,
             Self::Advanced => Glyph::Advanced,
             Self::About => Glyph::About,
         }

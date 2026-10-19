@@ -137,6 +137,7 @@
   - [ ] Ctrl + . 切换全半角标点：macOS、Linux
   - [ ] 云服务用量统计：Linux
   - [ ] 按需云联想与请求节奏：macOS、Linux
+  - [ ] 生词本整句翻译：Linux
 
 ## 四、其他输入方案
 

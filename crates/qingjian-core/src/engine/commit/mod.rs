@@ -210,7 +210,15 @@ impl Engine {
                     &sense.text,
                     used_sense == Some(index),
                 );
+                self.examples
+                    .note_word(translation.language, &sense.text, &candidate.text);
             }
+            self.record_encounter(&candidate.text, translation, used_sense.unwrap_or(0));
+        } else if matches!(
+            candidate.kind,
+            CandidateKind::Sentence | CandidateKind::Generated
+        ) {
+            self.translate_for_encounter(&candidate.text);
         }
         // 词库里有、释义表里没有的词：交给释义兜底在后台问云端，写进个人释义表，下次就有译词；私密输入中不问
         if matches!(
@@ -282,7 +290,7 @@ impl Engine {
             None
         };
         self.punctuation.note_committed(&candidate.text);
-        self.history.record(&candidate.text);
+        self.note_text(&candidate.text);
         let learned = matches!(
             candidate.kind,
             CandidateKind::Chinese

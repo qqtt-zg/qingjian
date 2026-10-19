@@ -12,3 +12,4 @@ pub mod phrases;
 pub mod shortcuts;
 pub mod speech;
 pub mod stats;
+pub mod vocabulary;

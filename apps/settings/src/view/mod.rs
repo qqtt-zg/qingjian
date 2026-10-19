@@ -149,6 +149,7 @@ fn page_children(
         PageId::Cloud => pages::cloud::cloud(ui, page)?,
         PageId::Speech => pages::speech::speech(ui, page)?,
         PageId::Stats => pages::stats::stats(ui, page)?,
+        PageId::Vocabulary => pages::vocabulary::vocabulary(ui, page)?,
         PageId::Advanced => pages::advanced::advanced(ui, page)?,
         PageId::About => pages::about::about(ui, page)?,
     })

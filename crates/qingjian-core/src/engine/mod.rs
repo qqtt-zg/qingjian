@@ -60,7 +60,7 @@ pub use statistics::{BOOKS, Book, NoUsageMeter, Usage, UsageMeter, UsageSummary,
 pub use timings::Timings;
 pub use translator::{NoTranslator, Translator};
 pub use vocabulary::{
-    FRESH_UNTIL, LevelCount, NoVocabularyTracker, VocabularySummary, VocabularyTracker,
+    Encounter, FRESH_UNTIL, LevelCount, NoVocabularyTracker, VocabularySummary, VocabularyTracker,
 };
 
 use crate::candidate::{Candidate, CandidateKind, CandidateList, Language};
@@ -222,6 +222,9 @@ pub struct Engine {
 
     /// 候选窗口当前页上的译词（壳每次画完告知），上屏时记成「看到过」。
     displayed: Vec<(Language, String)>,
+
+    /// 上屏过带译词的词、等那句话写完当例句。
+    examples: vocabulary::ExampleCollector,
 
     /// 上一次查询的摘要，上屏时写进输入日志。
     last_query: std::cell::RefCell<Option<query::QuerySnapshot>>,
@@ -454,6 +457,7 @@ impl Engine {
             vocabulary: Box::new(NoVocabularyTracker),
             gloss_filler: Box::new(NoGlossFiller),
             displayed: Vec::new(),
+            examples: vocabulary::ExampleCollector::default(),
             last_query: std::cell::RefCell::new(None),
             recording: Vec::new(),
             history: InputHistory::default(),

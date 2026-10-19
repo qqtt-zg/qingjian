@@ -36,11 +36,13 @@ pub enum Feature {
     PhoneSpeech,
     /// 中文组句中小键盘选候选或直接输入。
     NumpadDigit,
+    /// 上屏的整句翻译后记进生词本（随释义兜底）。
+    VocabularyTranslation,
 }
 
 impl Feature {
     #[cfg(test)]
-    pub const ALL: [Self; 16] = [
+    pub const ALL: [Self; 17] = [
         Self::AuxCode,
         Self::SwitchKeys,
         Self::DefaultEnglish,
@@ -57,6 +59,7 @@ impl Feature {
         Self::CloudRequestControls,
         Self::PhoneSpeech,
         Self::NumpadDigit,
+        Self::VocabularyTranslation,
     ];
 
     /// 当前平台显示这一项。
@@ -94,11 +97,13 @@ impl Feature {
             Self::TogglePunctuation => [Todo, Yes, Todo],
             // 系统的文本替换只有 macOS 有
             Self::SystemTextReplacements => [Yes, No, No],
-            // Linux 的输入法还没接云服务
+            // Linux 已接云服务，尚未记录云服务用量
             Self::ApiUsage => [Yes, Yes, Todo],
             Self::CloudRequestControls => [Todo, Yes, Todo],
             Self::PhoneSpeech => [No, Yes, No],
             Self::NumpadDigit => [No, Yes, No],
+            // Linux 还没接释义兜底
+            Self::VocabularyTranslation => [Yes, Yes, Todo],
         }
     }
 
@@ -122,6 +127,7 @@ impl Feature {
             Self::CloudRequestControls => "按需云联想与请求节奏",
             Self::PhoneSpeech => "手机朗读",
             Self::NumpadDigit => "小键盘数字用途",
+            Self::VocabularyTranslation => "生词本整句翻译",
         }
     }
 
@@ -150,6 +156,7 @@ impl Feature {
             ],
             Self::PhoneSpeech => &[],
             Self::NumpadDigit => &[(PageId::Input, "小键盘数字")],
+            Self::VocabularyTranslation => &[(PageId::Cloud, "生词本整句翻译")],
             Self::EnglishPunctuation | Self::StatusBar | Self::HorizontalGrid | Self::ApiUsage => {
                 &[]
             }

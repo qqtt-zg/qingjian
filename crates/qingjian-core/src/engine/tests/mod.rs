@@ -16,6 +16,7 @@ mod raw;
 mod shuangpin;
 mod spacing;
 mod traditional;
+mod vocabulary;
 mod zhuyin;
 
 use std::collections::HashMap;
