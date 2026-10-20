@@ -79,6 +79,13 @@ class SettingsActivity : Activity() {
         }
         column.addView(key)
         column.addView(ui.text("密钥加密保存在本机，不写入安装包。问题与当前词汇会发送给你配置的服务；该服务可能按使用量收费。", 13f, true))
+        val tools = android.widget.Switch(this).apply {
+            text = "启用学习工具"; contentDescription = "启用学习工具"; minHeight = ui.dp(52)
+            isChecked = org.qingjian.speech.learning.ai.tools.ToolSettings.enabled(this@SettingsActivity)
+            setOnCheckedChangeListener { _, value -> org.qingjian.speech.learning.ai.tools.ToolSettings.save(this@SettingsActivity, value) }
+        }
+        column.addView(tools)
+        column.addView(ui.caption("需要模型和中转站支持函数调用。最多进行3轮模型交互，只返回有限词库/测验数据；写入、练习和播放先显示操作卡。接口不兼容时可关闭，继续文字答疑。连接测试仅验证文字回复。"))
         saved = ui.text(loadError, 13f, true)
         column.addView(saved)
         save = ui.button("保存配置", true) {

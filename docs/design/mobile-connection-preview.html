@@ -1,0 +1,223 @@
+<div id="qingjian-connection-preview" class="viz-dotted-background">
+  <style>
+    #qingjian-connection-preview{--q-paper:light-dark(#f7faf4,#182620);--q-card:light-dark(#fffefb,#203229);--q-ink:light-dark(#233e34,#e3eee1);--q-muted:light-dark(#64765f,#a6b69d);--q-line:light-dark(#dce5d4,#354c3c);--q-soft:light-dark(#eaf1df,#304432);--q-green:light-dark(#225746,#c9e3b1);--q-inverse:light-dark(#fffef9,#183324);--q-warning:light-dark(#8e642e,#e9c187);--q-focus:light-dark(#afc2a1,#496b4c);font-family:"Microsoft YaHei","PingFang SC",sans-serif;color:var(--q-ink);padding:16px 12px 18px;box-sizing:border-box;color-scheme:light dark}
+    #qingjian-connection-preview *{box-sizing:border-box}
+    #qingjian-connection-preview button,#qingjian-connection-preview input{font:inherit;color:inherit}
+    #qingjian-connection-preview button{-webkit-tap-highlight-color:transparent}
+    #qingjian-connection-preview button:disabled{cursor:default;opacity:.65}
+    #qingjian-connection-preview button:focus-visible{outline:2px solid var(--q-green);outline-offset:3px}
+    #qingjian-connection-preview svg{width:20px;height:20px;stroke-width:1.7;flex:none}
+    #qingjian-connection-preview .q-phone{width:min(100%,390px);margin:auto;position:relative;overflow:hidden;border-radius:30px;background:var(--q-paper);border:6px solid var(--q-card);outline:1px solid var(--q-line);box-shadow:0 14px 45px light-dark(#29432d14,#00000025)}
+    #qingjian-connection-preview .q-os{height:30px;display:flex;align-items:center;justify-content:space-between;padding:0 19px;font-size:11px;font-weight:500}
+    #qingjian-connection-preview .q-os-icons{display:flex;gap:5px;align-items:center}
+    #qingjian-connection-preview .q-os-icons svg{width:12px;height:12px}
+    #qingjian-connection-preview .q-camera-dot{position:absolute;top:12px;left:calc(50% - 3px);width:6px;height:6px;background:var(--q-ink);border-radius:50%}
+    #qingjian-connection-preview .q-header{display:flex;align-items:center;gap:6px;height:58px;padding:0 12px 0 17px;border-bottom:1px solid var(--q-line)}
+    #qingjian-connection-preview .q-title{font-size:21px;font-weight:600;letter-spacing:.2px;margin:0;min-width:0;flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+    #qingjian-connection-preview .q-icon{border:0;background:none;width:44px;height:44px;display:inline-flex;align-items:center;justify-content:center;flex:none;border-radius:12px;padding:10px}
+    #qingjian-connection-preview .q-icon:hover{background:var(--q-soft)}
+    #qingjian-connection-preview .q-gear{color:var(--q-muted);margin-right:-3px}
+    #qingjian-connection-preview .q-scan{background:transparent;color:var(--q-green)}
+    #qingjian-connection-preview .q-connection{display:inline-flex;justify-content:center;align-items:center;gap:6px;flex:none;min-width:103px;height:44px;border:0;border-radius:12px;padding:0 8px;background:transparent;font-size:12px;color:var(--q-green);font-variant-numeric:tabular-nums;white-space:nowrap;transition:background .15s}
+    #qingjian-connection-preview .q-header .q-icon:hover,#qingjian-connection-preview .q-connection:hover{background:transparent;opacity:.8}
+    #qingjian-connection-preview .q-header .q-icon:active,#qingjian-connection-preview .q-connection:active{opacity:.55;transform:scale(.96)}
+    #qingjian-connection-preview .q-connection[data-state=connecting],#qingjian-connection-preview .q-connection[data-state=reconnecting]{color:var(--q-warning)}
+    #qingjian-connection-preview .q-dot{width:6px;height:6px;border-radius:50%;background:currentColor;flex:none}
+    #qingjian-connection-preview .q-connection svg{width:15px;height:15px}
+    #qingjian-connection-preview .q-spin{animation:qj-connection-spin 1s linear infinite}
+    #qingjian-connection-preview .q-content{padding:23px 20px 22px;min-height:470px}
+    #qingjian-connection-preview .q-overline{font-size:11px;color:var(--q-muted);margin:0 0 10px;letter-spacing:.5px}
+    #qingjian-connection-preview .q-welcome{font-family:Georgia,"SimSun",serif;font-size:29px;font-weight:400;line-height:1.5;margin:0 0 7px;letter-spacing:-.5px}
+    #qingjian-connection-preview .q-subtitle{font-size:12px;color:var(--q-muted);margin:0;line-height:1.8}
+    #qingjian-connection-preview .q-study-card{background:var(--q-green);color:var(--q-inverse);border-radius:20px;padding:20px;margin:23px 0 22px}
+    #qingjian-connection-preview .q-study-card .q-overline{color:inherit;opacity:.8}
+    #qingjian-connection-preview .q-word{font:38px/1.3 Georgia,serif;letter-spacing:-1px;margin:8px 0 6px}
+    #qingjian-connection-preview .q-meaning{font-size:13px;line-height:1.8;margin:0}
+    #qingjian-connection-preview .q-study-button{border:0;background:var(--q-paper);color:var(--q-green);border-radius:12px;margin-top:20px;min-height:44px;display:flex;align-items:center;justify-content:center;gap:10px;width:100%;font-size:13px}
+    #qingjian-connection-preview .q-row{display:flex;align-items:center;gap:12px;min-height:65px;border-bottom:1px solid var(--q-line);font-size:13px}
+    #qingjian-connection-preview .q-row>svg{color:var(--q-muted)}
+    #qingjian-connection-preview .q-row>div{flex:1}
+    #qingjian-connection-preview .q-row small{display:block;font-size:11px;color:var(--q-muted);margin-top:5px}
+    #qingjian-connection-preview .q-word-list .q-row{min-height:91px}
+    #qingjian-connection-preview .q-word-list strong{font:24px Georgia,serif}
+    #qingjian-connection-preview .q-word-list .q-icon{background:var(--q-soft);color:var(--q-green)}
+    #qingjian-connection-preview .q-ai-note{background:var(--q-soft);padding:13px 15px;border-radius:16px 16px 4px 16px;margin:11px 0 28px 30px;font-size:13px;line-height:1.8}
+    #qingjian-connection-preview .q-teacher{display:flex;align-items:center;gap:8px;font-size:12px;margin-bottom:15px}
+    #qingjian-connection-preview .q-teacher svg{color:var(--q-green);width:17px;height:17px}
+    #qingjian-connection-preview .q-ai-answer{font-size:13px;line-height:1.9}
+    #qingjian-connection-preview .q-example{padding-left:13px;border-left:2px solid var(--q-focus);margin:19px 0}
+    #qingjian-connection-preview .q-example strong{font:25px Georgia,serif;font-weight:400}
+    #qingjian-connection-preview .q-example p{font-size:12px;color:var(--q-muted);margin:6px 0}
+    #qingjian-connection-preview .q-nav{height:66px;display:flex;border-top:1px solid var(--q-line);padding:5px 15px;background:var(--q-card);gap:13px}
+    #qingjian-connection-preview .q-nav button{flex:1;border:0;border-radius:16px;background:transparent;font-size:11px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:5px;color:var(--q-muted)}
+    #qingjian-connection-preview .q-nav button[aria-current=page]{color:var(--q-green);background:var(--q-soft)}
+    #qingjian-connection-preview .q-gesture{height:16px;display:grid;place-items:center;background:var(--q-card)}
+    #qingjian-connection-preview .q-gesture:after{content:"";width:96px;height:3px;background:var(--q-muted);border-radius:4px;opacity:.75}
+    #qingjian-connection-preview .q-toast{position:absolute;left:16px;right:16px;bottom:91px;background:var(--q-card);border:1px solid var(--q-line);box-shadow:0 6px 22px light-dark(#203d2420,#0005);padding:12px 14px;border-radius:13px;font-size:12px;line-height:1.7;z-index:5}
+    #qingjian-connection-preview .q-preview-controls{display:flex;justify-content:center;flex-wrap:wrap;align-items:center;gap:5px;margin:18px auto 0;max-width:400px}
+    #qingjian-connection-preview .q-preview-controls button{background:var(--q-card);border:1px solid var(--q-line);border-radius:8px;min-height:36px;padding:6px 9px;font-size:11px}
+    #qingjian-connection-preview .q-preview-controls button[aria-pressed=true]{background:var(--q-soft);color:var(--q-green)}
+    #qingjian-connection-preview .q-preview-caption{display:block;width:100%;font-size:11px;text-align:center;color:var(--q-muted);margin-bottom:5px}
+    #qingjian-connection-preview .q-scanner{position:absolute;inset:0;z-index:10;background:#101b16;color:#f4f7f2;display:flex;flex-direction:column}
+    #qingjian-connection-preview [hidden]{display:none!important}
+    #qingjian-connection-preview .q-scanner .q-os{color:#f4f7f2}
+    #qingjian-connection-preview .q-scanner .q-camera-dot{background:#d3dfd1}
+    #qingjian-connection-preview .q-scanner-header{height:60px;display:flex;align-items:center;gap:9px;padding:0 14px}
+    #qingjian-connection-preview .q-scanner-title{font-size:17px;font-weight:500}
+    #qingjian-connection-preview .q-scanner .q-icon:hover{background:#2c3932}
+    #qingjian-connection-preview .q-camera-preview{position:absolute;inset:90px 0 90px;background:radial-gradient(ellipse at 50% 42%,#394339,#17231c 64%);transition:background .2s;z-index:-1}
+    #qingjian-connection-preview .q-scanner[data-torch=on] .q-camera-preview{background:radial-gradient(ellipse at 50% 42%,#687963,#27352b 75%)}
+    #qingjian-connection-preview .q-camera-monitor{position:absolute;width:90%;height:205px;top:25%;left:5%;border:6px solid #52604d;border-bottom-width:13px;border-radius:10px;background:#c8d1b6;opacity:.23}
+    #qingjian-connection-preview .q-camera-monitor:after{content:"";position:absolute;bottom:-48px;left:40%;width:20%;height:35px;background:#52604d;border-radius:0 0 10px 10px}
+    #qingjian-connection-preview .q-viewfinder{position:relative;flex:none;width:64%;aspect-ratio:1;margin:58px auto 0}
+    #qingjian-connection-preview .q-corner{position:absolute;width:26px;height:26px;border-color:#dcebc6;border-style:solid;border-width:0;border-radius:4px}
+    #qingjian-connection-preview .q-corner:nth-child(1){left:0;top:0;border-top-width:3px;border-left-width:3px}
+    #qingjian-connection-preview .q-corner:nth-child(2){right:0;top:0;border-top-width:3px;border-right-width:3px}
+    #qingjian-connection-preview .q-corner:nth-child(3){left:0;bottom:0;border-bottom-width:3px;border-left-width:3px}
+    #qingjian-connection-preview .q-corner:nth-child(4){right:0;bottom:0;border-bottom-width:3px;border-right-width:3px}
+    #qingjian-connection-preview .q-scan-line{height:1px;position:absolute;left:12px;right:12px;top:50%;background:#d3edb6;box-shadow:0 0 12px #d4ecb255}
+    #qingjian-connection-preview .q-scan-help{font-size:13px;line-height:1.9;text-align:center;margin:25px 18px 0;color:#d5e0d0}
+    #qingjian-connection-preview .q-scan-help small{display:block;font-size:11px;color:#a9b9a2;margin-top:5px}
+    #qingjian-connection-preview .q-torch{display:flex;flex-direction:column;align-items:center;gap:9px;border:0;background:none;color:#e1eadb;font-size:12px;margin:26px auto 0;min-width:108px;min-height:82px;padding:4px 12px}
+    #qingjian-connection-preview .q-torch-icon{display:grid;place-items:center;border:1px solid #73806d;border-radius:50%;width:46px;height:46px;background:#202e25}
+    #qingjian-connection-preview .q-torch[aria-pressed=true] .q-torch-icon{background:#dcebc7;color:#203a2e;border-color:#dcebc7}
+    #qingjian-connection-preview .q-torch svg{width:22px;height:22px;stroke-width:1.8}
+    #qingjian-connection-preview .q-scan-demo{font-size:11px;color:#c2cfba;text-decoration:underline;text-underline-offset:4px;min-height:44px;padding:10px 16px;margin:auto auto 9px;background:none;border:0}
+    #qingjian-connection-preview .q-scan-gesture{height:18px;display:grid;place-items:center}
+    #qingjian-connection-preview .q-scan-gesture:after{content:"";width:96px;height:3px;border-radius:4px;background:#afbda6}
+    @keyframes qj-connection-spin{to{transform:rotate(360deg)}}
+    @media(max-width:350px){#qingjian-connection-preview{padding:10px 3px 14px}#qingjian-connection-preview .q-phone{border-width:3px;border-radius:25px}#qingjian-connection-preview .q-header{padding:0 8px 0 11px;gap:3px}#qingjian-connection-preview .q-title{font-size:19px}#qingjian-connection-preview .q-gear{width:36px;padding:8px}#qingjian-connection-preview .q-connection{min-width:99px;font-size:11px;gap:5px;padding:0 5px}#qingjian-connection-preview .q-content{min-height:450px;padding:21px 17px}#qingjian-connection-preview .q-welcome{font-size:27px}#qingjian-connection-preview .q-viewfinder{margin-top:40px}#qingjian-connection-preview .q-scan-help{font-size:12px}}
+    @media(prefers-reduced-motion:reduce){#qingjian-connection-preview *{animation:none!important;transition:none!important}}
+  </style>
+
+  <section class="q-phone" aria-label="青简连接与扫码交互预览">
+    <div class="q-os"><span>9:41</span><span class="q-camera-dot" aria-hidden="true"></span><span class="q-os-icons" aria-hidden="true"><i data-lucide="signal"></i><i data-lucide="wifi"></i><i data-lucide="battery-full"></i></span></div>
+    <header class="q-header">
+      <h2 class="q-title">青简</h2>
+      <button type="button" class="q-icon q-gear" data-action="settings" aria-label="应用设置"><i data-lucide="settings" aria-hidden="true"></i></button>
+      <button type="button" class="q-connection" data-action="connection" data-state="connected" aria-label="电脑已连接，点击停止连接"><span class="q-dot" aria-hidden="true"></span><span class="q-state-text">已连接</span></button>
+      <button type="button" class="q-icon q-scan" data-action="scan" aria-label="扫码连接电脑"><i data-lucide="scan-line" aria-hidden="true"></i></button>
+    </header>
+    <main class="q-content"></main>
+    <nav class="q-nav" aria-label="主导航">
+      <button type="button" data-page="learn" aria-current="page"><i data-lucide="house" aria-hidden="true"></i>学习</button>
+      <button type="button" data-page="words"><i data-lucide="book-open" aria-hidden="true"></i>词库</button>
+      <button type="button" data-page="ai"><i data-lucide="sparkles" aria-hidden="true"></i>AI 老师</button>
+    </nav>
+    <div class="q-gesture" aria-hidden="true"></div>
+    <div class="q-toast" role="status" aria-live="polite" hidden></div>
+
+    <section class="q-scanner" role="dialog" aria-modal="true" aria-label="扫码连接电脑" data-orientation="portrait" data-torch="off" hidden>
+      <div class="q-os"><span>9:41</span><span class="q-camera-dot" aria-hidden="true"></span><span class="q-os-icons" aria-hidden="true"><i data-lucide="signal"></i><i data-lucide="battery-full"></i></span></div>
+      <header class="q-scanner-header"><button type="button" class="q-icon" data-action="close-scan" aria-label="返回学习页面"><i data-lucide="arrow-left" aria-hidden="true"></i></button><span class="q-scanner-title">扫码连接电脑</span></header>
+      <div class="q-camera-preview" aria-hidden="true"><div class="q-camera-monitor"></div></div>
+      <div class="q-viewfinder" aria-hidden="true"><span class="q-corner"></span><span class="q-corner"></span><span class="q-corner"></span><span class="q-corner"></span><span class="q-scan-line"></span></div>
+      <p class="q-scan-help">对准电脑上的青简配对二维码<small>识别后自动连接</small></p>
+      <button type="button" class="q-torch" data-action="torch" aria-label="打开手电筒" aria-pressed="false"><span class="q-torch-icon"><i data-lucide="flashlight-off" aria-hidden="true"></i></span><span class="q-torch-label">打开手电筒</span></button>
+      <button type="button" class="q-scan-demo" data-action="scan-success">模拟识别成功 · 演示取景</button>
+      <div class="q-scan-gesture" aria-hidden="true"></div>
+    </section>
+    <span class="q-announcement" role="status" aria-live="polite" style="position:absolute;width:1px;height:1px;padding:0;overflow:hidden;clip-path:inset(50%)"></span>
+  </section>
+  <div class="q-preview-controls" aria-label="交互演示场景">
+    <span class="q-preview-caption">交互演示 · 不连接电脑或启用相机</span>
+    <button type="button" data-action="simulate-offline" aria-pressed="false">模拟断网</button>
+    <button type="button" data-action="simulate-online">网络恢复</button>
+    <button type="button" data-action="simulate-deadline">跳到一分钟上限</button>
+  </div>
+
+  <script>
+    (()=>{
+      const root=document.getElementById('qingjian-connection-preview');
+      const query=selector=>root.querySelector(selector);
+      const phone=query('.q-phone'),button=query('.q-connection'),scanner=query('.q-scanner'),content=query('.q-content');
+      const busy=()=>state.phase==='connecting'||state.phase==='reconnecting';
+      const allowedPages=['learn','words','ai'];
+      const saved=window.openai?.widgetState?.privateContent;
+      const state={page:allowedPages.includes(saved?.page)?saved.page:'learn',phase:'connected',network:true,started:0,attempt:0,finishAt:0,nextAt:0,stopAt:0,reason:'',torch:false};
+      let noticeTimer=0,previousRender='';
+      const ico=(name,cls='')=>`<i data-lucide="${name}" class="${cls}" aria-hidden="true"></i>`;
+      function icons(){root.querySelectorAll('button').forEach(b=>b.classList.add('cursor-interaction'));window.lucide?.createIcons({attrs:{width:20,height:20}});}
+      function remember(){
+        const api=window.openai;
+        if(api?.setWidgetState)Promise.resolve(api.setWidgetState({modelContent:{design:'顶部原页切换连接；自动重连最多一分钟；扫码固定竖屏',page:state.page,connection:state.phase},privateContent:{page:state.page}})).catch(()=>{});
+      }
+      function announce(text){query('.q-announcement').textContent=text;}
+      function toast(text){query('.q-toast').textContent=text;query('.q-toast').hidden=false;clearTimeout(noticeTimer);noticeTimer=setTimeout(()=>{query('.q-toast').hidden=true;},2800);}
+      function page(){
+        query('.q-title').textContent={learn:'青简',words:'词库',ai:'AI 老师'}[state.page];
+        query('.q-gear').hidden=state.page!=='learn';
+        root.querySelectorAll('[data-page]').forEach(b=>{if(b.dataset.page===state.page)b.setAttribute('aria-current','page');else b.removeAttribute('aria-current');});
+        if(state.page==='learn')content.innerHTML=`<p class="q-overline">初学入门 · 每天 10 分钟</p><h3 class="q-welcome">今天，也学会一点。</h3><p class="q-subtitle">从你真正用过的词开始。</p><section class="q-study-card"><p class="q-overline">继续你的学习</p><div class="q-word">control</div><p class="q-meaning">控制；调节</p><button type="button" class="q-study-button" data-action="study">继续学习 ${ico('arrow-right')}</button></section><div class="q-row">${ico('book-open')}<div>复习一下，记得更牢<small>先回忆，再看笔记</small></div>${ico('chevron-right')}</div><div class="q-row">${ico('sparkles')}<div>和 AI 老师聊聊<small>区分近义词，学会日常表达</small></div>${ico('chevron-right')}</div>`;
+        if(state.page==='words')content.innerHTML=`<p class="q-overline">我的词汇</p><h3 class="q-welcome">用过的词，慢慢学会。</h3><div class="q-word-list">${[['control','控制；调节'],['manage','管理；处理'],['realize','意识到；实现'],['implement','实施；执行']].map(([word,meaning])=>`<div class="q-row"><div><strong>${word}</strong><small>${meaning}</small></div><button type="button" class="q-icon" data-action="sample" aria-label="试听 ${word}">${ico('volume-2')}</button></div>`).join('')}</div>`;
+        if(state.page==='ai')content.innerHTML=`<p class="q-overline">今天 · control / manage</p><div class="q-ai-note">帮我学会区分 control 和 manage。</div><div class="q-teacher">${ico('sparkles')}青简老师</div><div class="q-ai-answer">先分清这两个日常场景：<div class="q-example"><strong>control the volume</strong><p>调节音量 · 控制事物的状态</p></div><div class="q-example"><strong>manage a team</strong><p>管理团队 · 安排和处理事务</p></div>可以先各读一遍，再试着造一句自己的句子。</div>`;
+        icons();
+      }
+      function render(){
+        const elapsed=state.started?Math.max(0,performance.now()-state.started):0;
+        const left=Math.max(0,Math.ceil((60000-elapsed)/1000));
+        const text={connected:'已连接',idle:'重新连接',connecting:'连接中',reconnecting:`重连 ${String(left).padStart(2,'0')}s`,stopping:'正在停止'}[state.phase];
+        const signature=state.phase+'|'+text;
+        button.dataset.state=state.phase;
+        if(signature!==previousRender){
+          previousRender=signature;
+          button.innerHTML=state.phase==='connected'?`<span class="q-dot" aria-hidden="true"></span><span>${text}</span>`:state.phase==='idle'?`${ico('rotate-cw')}<span>${text}</span>`:`${ico('loader-circle','q-spin')}<span>${text}</span>`;
+          icons();
+        }
+        button.disabled=state.phase==='stopping';
+        const labels={connected:'电脑已连接，点击停止连接',idle:state.reason==='timeout'?'自动重连一分钟未成功，点击重新连接':'重新连接电脑',connecting:'正在连接电脑，点击停止连接',reconnecting:`自动重连第${state.attempt}次，剩余${left}秒，点击停止连接`,stopping:'正在停止连接'};
+        button.setAttribute('aria-label',labels[state.phase]);
+        query('[data-action=simulate-offline]').setAttribute('aria-pressed',String(!state.network));
+        query('[data-action=simulate-deadline]').disabled=!busy();
+      }
+      function connected(){state.phase='connected';state.started=0;state.finishAt=0;state.nextAt=0;state.reason='';render();announce('电脑已连接，点击顶部状态可停止连接');remember();}
+      function begin(phase='connecting'){
+        const now=performance.now();state.phase=phase;state.started=now;state.attempt=1;state.finishAt=now+1100;state.nextAt=0;state.reason='';render();announce(phase==='reconnecting'?'连接中断，开始自动重连，最多一分钟':'正在连接电脑，点击顶部状态可停止');remember();
+      }
+      function stop(){state.phase='stopping';state.finishAt=0;state.nextAt=0;state.started=0;state.stopAt=performance.now()+300;state.reason='manual';render();announce('正在停止连接');remember();}
+      function tick(){
+        if(!root.isConnected)return;
+        const now=performance.now();
+        if(state.phase==='stopping'&&now>=state.stopAt){state.phase='idle';render();announce('已停止连接，可点击重新连接');remember();return;}
+        if(!busy())return;
+        if(now-state.started>=60000){state.phase='idle';state.finishAt=0;state.nextAt=0;state.started=0;state.reason='timeout';render();announce('一分钟内未能恢复连接，自动重连已停止');toast('一分钟内未能恢复连接，请点顶部「重新连接」');remember();return;}
+        if(state.finishAt&&now>=state.finishAt){
+          state.finishAt=0;
+          if(state.network){connected();return;}
+          state.phase='reconnecting';state.nextAt=now+Math.min(1500*2**Math.min(state.attempt-1,4),15000);
+        } else if(!state.finishAt&&state.nextAt&&now>=state.nextAt){state.attempt++;state.nextAt=0;state.finishAt=now+800;}
+        render();
+      }
+      function setTorch(on){state.torch=on;scanner.dataset.torch=on?'on':'off';const torch=query('.q-torch');torch.setAttribute('aria-pressed',String(on));torch.setAttribute('aria-label',on?'关闭手电筒':'打开手电筒');query('.q-torch-icon').innerHTML=ico(on?'flashlight':'flashlight-off');query('.q-torch-label').textContent=on?'关闭手电筒':'打开手电筒';icons();}
+      function closeScan(){setTorch(false);scanner.hidden=true;phone.querySelector('.q-header').inert=false;content.inert=false;query('.q-nav').inert=false;query('.q-scan').focus();}
+      root.addEventListener('click',event=>{
+        const target=event.target.closest('button');if(!target||!root.contains(target)||target.disabled)return;
+        if(target.dataset.page){state.page=target.dataset.page;page();remember();return;}
+        switch(target.dataset.action){
+          case 'connection':if(state.phase==='idle')begin();else if(state.phase!=='stopping')stop();break;
+          case 'simulate-offline':state.network=false;if(state.phase==='connected')begin('reconnecting');else if(state.phase==='idle')toast('网络不可用；连接保持停止');render();break;
+          case 'simulate-online':state.network=true;if(busy()){state.finishAt=performance.now()+700;state.nextAt=0;}else toast(state.phase==='idle'?'网络已恢复，请点顶部「重新连接」':'网络正常');render();break;
+          case 'simulate-deadline':if(busy()){state.started=performance.now()-60001;tick();}break;
+          case 'scan':setTorch(false);scanner.hidden=false;phone.querySelector('.q-header').inert=true;content.inert=true;query('.q-nav').inert=true;query('[data-action=close-scan]').focus();break;
+          case 'close-scan':closeScan();break;
+          case 'torch':setTorch(!state.torch);break;
+          case 'scan-success':closeScan();begin();break;
+          case 'settings':toast('应用设置入口保持在学习首页');break;
+          case 'study':toast('继续学习当前词 · 连接操作始终留在顶部');break;
+          case 'sample':toast('示例试听入口，本次不播放音频');break;
+        }
+      });
+      root.addEventListener('keydown',event=>{
+        if(scanner.hidden)return;
+        if(event.key==='Escape'){event.preventDefault();closeScan();}
+        if(event.key==='Tab'){
+          const items=[...scanner.querySelectorAll('button:not(:disabled)')];const first=items[0],last=items[items.length-1];
+          if(event.shiftKey&&document.activeElement===first){event.preventDefault();last.focus();}else if(!event.shiftKey&&document.activeElement===last){event.preventDefault();first.focus();}
+        }
+      });
+      window.addEventListener('openai:set_globals',event=>{const next=event.detail?.globals?.widgetState?.privateContent?.page;if(allowedPages.includes(next)&&next!==state.page){state.page=next;page();}});
+      const timer=setInterval(()=>{if(!root.isConnected){clearInterval(timer);clearTimeout(noticeTimer);return;}tick();},100);
+      page();render();
+    })();
+  </script>
+</div>

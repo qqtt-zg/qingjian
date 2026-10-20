@@ -24,6 +24,7 @@ class QuizActivity : Activity() {
     private var input: EditText? = null
     private var draft = ""
     private var notice = ""
+    private val speech by lazy { PreviewSpeech(this) }
 
     override fun onCreate(state: Bundle?) {
         super.onCreate(state)
@@ -42,6 +43,7 @@ class QuizActivity : Activity() {
     }
 
     override fun onResume() { super.onResume(); render() }
+    override fun onPause() { speech.close(); super.onPause() }
 
     override fun onSaveInstanceState(out: Bundle) {
         out.putString("questions", JSONArray(questions.map { it.json() }).toString())
@@ -50,25 +52,40 @@ class QuizActivity : Activity() {
     }
 
     private fun newRound() {
-        val selected = if(intent.getBooleanExtra("wrong_only", false)) practice.mistakes().filter { it.kind == kind }.map { it.wordId }.toSet() else null
-        questions = Builder.build(store.words(), kind, selected)
+        val actionId = intent.getLongExtra("learning_action", 0)
+        if(actionId > 0) {
+            questions = runCatching { org.qingjian.speech.learning.ai.tools.ActionStore(this).practice(actionId) }.getOrElse {
+                notice = "练习资料不适用，请补充中文笔记或重新准备。"; emptyList()
+            }
+            index = 0; input = null; draft = ""; return
+        }
+        val selected = if(intent.getBooleanExtra("wrong_only", false)) practice.mistakes().filter { it.kind == kind }.map { it.wordId }.toSet() else intent.getLongExtra("word_id", 0).takeIf { it > 0 }?.let { setOf(it) }
+        val words = store.words()
+        val examples = if(kind == Kind.CLOZE) words.filter { selected == null || it.id in selected }.mapNotNull {
+            org.qingjian.speech.learning.ai.tools.ActionStore(this).approvedCard(it.id)?.optString("example")?.let { example -> it.id to example }
+        }.toMap() else emptyMap()
+        questions = Builder.build(words, kind, selected, examples = examples)
         index = 0; input = null; draft = ""; notice = ""
     }
 
     private fun submit(question: Question, text: String) {
+        speech.stop()
         if(text.isBlank() || text.length > if(question.kind == Kind.SPELLING) 500 else 1000) { input?.error = "请填写答案，最多 500 字"; return }
         try { practice.submit(question, text); notice = ""; render() }
         catch(error: IllegalArgumentException) { notice = error.message ?: "无法保存答案，请重新开始"; render() }
     }
 
     private fun render() {
+        speech.clearBindings()
         draft = input?.text?.toString() ?: draft; input = null
         val column = ui.column()
         column.addView(ui.text("按你保存的中文笔记出题；成绩仅表示本次作答，不代表已掌握词汇。", 13f, true))
         if(notice.isNotEmpty()) column.addView(ui.text(notice, muted = true))
         if(questions.isEmpty()) {
-            val empty = if(intent.getBooleanExtra("wrong_only", false)) "目前没有可重测的本类错题；笔记重复的拼写条目会被跳过。"
+            val empty = if(kind == Kind.CLOZE) "搭配填空需要词卡中已有包含原词的英文例句，以及至少两个有中文笔记的词。可先向 AI 请求搭配例句。"
+                else if(intent.getBooleanExtra("wrong_only", false)) "目前没有可重测的本类错题；笔记重复的拼写条目会被跳过。"
                 else if(kind == Kind.CHOICE) "词义选择至少需要两条不同的中文笔记。"
+                else if(kind == Kind.ENGLISH_CHOICE) "英文选词需要至少两个有中文笔记的不同词，目标词的笔记应能区分。"
                 else "先补充中文笔记。多个词的笔记相同时会跳过，避免拼写题答案不唯一。"
             column.addView(ui.text(empty, 18f))
             column.addView(ui.button("重新准备题目", true) { newRound(); render() })
@@ -81,18 +98,20 @@ class QuizActivity : Activity() {
             column.addView(ui.title("本轮完成"))
             column.addView(ui.text("${kind.label}：答对 ${answers.count { it.correct }} / ${questions.size}", 22f))
             column.addView(ui.text("错题已保存，后续同一词同类题答对后会从待巩固列表移除。", muted = true))
-            column.addView(ui.button("再来一轮", true) { newRound(); render() })
+            column.addView(ui.button(if(intent.getLongExtra("learning_action", 0) > 0) "结束本轮练习" else "再来一轮", true) {
+                if(intent.getLongExtra("learning_action", 0) > 0) finish() else { newRound(); render() }
+            })
             column.addView(ui.button("查看错题本") { startActivity(Intent(this, HistoryActivity::class.java)) })
         } else {
             val question = questions[index]
             val result = practice.answer(question.key)
             column.addView(ui.text("${index + 1} / ${questions.size}", muted = true))
             ui.card(column) { card ->
-                card.addView(ui.text(if(kind == Kind.CHOICE) "选择你笔记中对应的意思" else "根据这条中文笔记拼写英文", 18f))
-                card.addView(ui.title(if(kind == Kind.CHOICE) question.english else question.meaning))
+                card.addView(ui.text(when(kind) { Kind.CHOICE -> "选择你笔记中对应的意思"; Kind.ENGLISH_CHOICE -> "选择对应的英文词或短语"; Kind.CLOZE -> "选择原词卡例句中的搭配"; else -> "根据这条中文笔记拼写英文" }, 18f))
+                card.addView(ui.title(when(kind) { Kind.CHOICE -> question.english; Kind.CLOZE -> question.prompt; else -> question.meaning }))
+                if(kind != Kind.SPELLING) OptionsView(this, speech).render(card, question, result) { submit(question, it) }
                 if(result == null) {
-                    if(kind == Kind.CHOICE) question.options.forEach { option -> card.addView(ui.button(option) { submit(question, option) }) }
-                    else {
+                    if(kind == Kind.SPELLING) {
                         input = ui.input("填写单词或短语", draft).apply {
                             id = ID_ANSWER; inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS
                         }
@@ -106,6 +125,13 @@ class QuizActivity : Activity() {
                     card.addView(ui.button(if(index + 1 == questions.size) "查看本轮结果" else "下一题", true) { index++; input = null; draft = ""; render() })
                     card.addView(ui.button("录音跟读这个词") { startActivity(Intent(this, OralActivity::class.java).putExtra("word_id", question.wordId)) })
                     card.addView(ui.button("问一问为什么") { startActivity(Intent(this, TutorActivity::class.java).putExtra("word_id", question.wordId)) })
+                    card.addView(ui.button(if(result.correct) "继续练搭配" else "再巩固一下") {
+                        if(result.correct && kind != Kind.CLOZE) {
+                            startActivity(Intent(this, QuizActivity::class.java).putExtra("word_id", question.wordId).putExtra("kind", Kind.CLOZE.name))
+                        } else {
+                            intent.removeExtra("learning_action"); intent.putExtra("word_id", question.wordId); newRound(); render()
+                        }
+                    })
                 }
             }
         }

@@ -70,6 +70,8 @@ class ScanActivity : CaptureActivity() {
             barcodeScanner.setTorchOff()
             btnTorch.isSelected = false
         }
+        btnTorch.setImageResource(if(isTorchOn)R.drawable.ic_flashlight_off else R.drawable.ic_flashlight)
+        btnTorch.contentDescription=if(isTorchOn)"关闭手电筒" else "打开手电筒"
     }
 
     private fun startLaserAnimation() {
@@ -97,6 +99,8 @@ class ScanActivity : CaptureActivity() {
             barcodeScanner.setTorchOff()
             isTorchOn = false
             btnTorch.isSelected = false
+            btnTorch.setImageResource(R.drawable.ic_flashlight)
+            btnTorch.contentDescription="打开手电筒"
         }
     }
 

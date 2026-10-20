@@ -10,18 +10,29 @@ import java.net.SocketTimeoutException
 import java.util.concurrent.CancellationException
 
 class Client(private val open: (URL) -> HttpURLConnection = { it.openConnection() as HttpURLConnection }) {
+    var task = "AI请求"
     @Volatile private var connection: HttpURLConnection? = null
     @Volatile private var cancelled = false
 
     fun cancel() { cancelled = true; connection?.disconnect() }
 
     fun complete(profile: Profile, messages: JSONArray, progress: (String) -> Unit = {}): String {
+        val result = turn(profile, messages, null, true, progress)
+        check(result.calls.isEmpty() && result.text.isNotBlank()) { "当前文字请求不接受工具调用" }
+        return result.text
+    }
+
+    fun turn(profile: Profile, messages: JSONArray, tools: JSONArray? = null, allowCalls: Boolean = true, progress: (String) -> Unit = {}): ModelReply {
         profile.validate()
         check(!cancelled) { "请求已取消" }
         progress("正在连接 AI 服务…")
-        val body = JSONObject().put("model", profile.model.trim()).put("messages", messages)
-            .put("stream", false).put("max_tokens", 1536).toString().toByteArray(Charsets.UTF_8)
+        val data = JSONObject().put("model", profile.model.trim()).put("messages", messages).put("stream", false).put("max_tokens", 1536)
+        if(tools != null) data.put("tools", tools).put("tool_choice", if(allowCalls) "auto" else "none")
+        val body = data.toString().toByteArray(Charsets.UTF_8)
         val request = open(URL(profile.endpoint()))
+        val started=System.nanoTime()
+        var succeeded=false
+        val metrics=JSONObject().put("model",profile.model).put("input",JSONObject.NULL).put("output",JSONObject.NULL).put("cached",JSONObject.NULL).put("reasoning",JSONObject.NULL)
         connection = request
         try {
             if (cancelled) throw CancellationException()
@@ -40,6 +51,7 @@ class Client(private val open: (URL) -> HttpURLConnection = { it.openConnection(
             if (status !in 200..299) throw IllegalStateException(when(status) {
                 in 300..399 -> "接口发生跳转，请填写最终 HTTPS 地址（未转发密钥）"
                 401, 403 -> "认证失败（HTTP $status），请检查密钥与模型权限"
+                400 -> "请求格式或工具协议不兼容（HTTP 400）；可在 AI 设置关闭学习工具后重试"
                 404 -> "接口或模型不存在（HTTP 404），请检查 API 地址和模型 ID"
                 429 -> "请求受限或额度不足（HTTP 429），请稍后手动重试"
                 else -> "服务返回 HTTP $status，请检查模型是否支持 Chat Completions 与 max_tokens 参数"
@@ -58,24 +70,25 @@ class Client(private val open: (URL) -> HttpURLConnection = { it.openConnection(
                     bytes.write(buffer, 0, n)
                 }
             }
-            return parse(bytes.toString("UTF-8"))
-        } finally { request.disconnect(); connection = null }
+            val raw=bytes.toString("UTF-8")
+            val usage=JSONObject(raw).optJSONObject("usage")
+            fun number(source:JSONObject?,key:String):Any=source?.opt(key).let {if(it is Number&&it.toLong()>=0)it.toLong() else JSONObject.NULL}
+            metrics.put("input",number(usage,"prompt_tokens")).put("output",number(usage,"completion_tokens"))
+                .put("cached",number(usage?.optJSONObject("prompt_tokens_details"),"cached_tokens"))
+                .put("reasoning",number(usage?.optJSONObject("completion_tokens_details"),"reasoning_tokens"))
+            val result=ModelReply.parse(raw);succeeded=true;return result
+        } finally {
+            metrics.put("state",if(succeeded)"成功" else if(cancelled)"取消" else "失败").put("duration_ms",(System.nanoTime()-started)/1_000_000)
+            org.qingjian.speech.learning.archive.Usage.capture(task,metrics)
+            request.disconnect(); connection = null
+        }
     }
 
     companion object {
         fun parse(body: String): String {
-            val choice = JSONObject(body).getJSONArray("choices").getJSONObject(0)
-            val content = choice.getJSONObject("message").opt("content")
-            val text = when(content) {
-                is String -> content
-                is JSONArray -> (0 until content.length()).mapNotNull { index ->
-                    content.optJSONObject(index)?.takeIf { it.optString("type") == "text" }?.optString("text")
-                }.joinToString("\n")
-                else -> ""
-            }.trim()
-            check(text.isNotBlank()) { "接口没有返回文字回答，请确认所选模型支持文本对话" }
-            check(text.length <= 30000) { "回答过长，请缩小问题后重试" }
-            return text + if(choice.optString("finish_reason") == "length") "\n\n（回答达到长度上限，可继续追问。）" else ""
+            val result = ModelReply.parse(body)
+            check(result.text.isNotBlank() && result.calls.isEmpty()) { "接口没有返回文字回答，请确认所选模型支持文本对话" }
+            return result.text
         }
 
         fun errorMessage(error: Exception): String = when(error) {

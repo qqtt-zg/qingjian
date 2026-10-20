@@ -13,4 +13,6 @@ data class Recording(
     val duration: Long,
 
     val rating: String,
+    val reference: String = english,
+    val mode: String = "word",
 )

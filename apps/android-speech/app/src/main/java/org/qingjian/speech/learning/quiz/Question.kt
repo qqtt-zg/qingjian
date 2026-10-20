@@ -17,11 +17,18 @@ data class Question(
     val kind: Kind,
 
     val options: List<String>,
+
+    val prompt: String = "",
 ) {
-    fun correct(answer: String) = if(kind == Kind.SPELLING) normalize(answer) == normalize(english) else answer == meaning
+    fun correct(answer: String) = when(kind) {
+        Kind.CHOICE -> answer == meaning
+        else -> normalize(answer) == normalize(english)
+    }
+
+    val englishOptions get() = kind in listOf(Kind.ENGLISH_CHOICE, Kind.CLOZE)
 
     fun json(): JSONObject = JSONObject().put("key", key).put("word", wordId).put("english", english)
-        .put("meaning", meaning).put("kind", kind.name).put("options", JSONArray(options))
+        .put("meaning", meaning).put("kind", kind.name).put("options", JSONArray(options)).put("prompt", prompt)
 
     companion object {
         fun normalize(value: String) = value.trim().lowercase(Locale.ROOT).replace('’', '\'').replace(Regex("\\s+"), " ")
@@ -29,11 +36,14 @@ data class Question(
         fun from(value: JSONObject): Question {
             val options = value.getJSONArray("options")
             val result = Question(value.getString("key"), value.getLong("word"), value.getString("english"),
-                value.getString("meaning"), Kind.valueOf(value.getString("kind")), (0 until options.length()).map { options.getString(it) })
+                value.getString("meaning"), Kind.valueOf(value.getString("kind")), (0 until options.length()).map { options.getString(it) }, value.optString("prompt"))
             require(result.key.matches(Regex("[a-f0-9-]{36}")) && result.wordId > 0)
             require(result.english.length in 1..500 && result.meaning.length in 1..1000)
             require(result.options.size <= 4 && result.options.all { it.length in 1..1000 })
             if(result.kind == Kind.CHOICE) require(result.options.size >= 2 && result.meaning in result.options)
+            if(result.englishOptions) require(result.options.size >= 2 && result.english in result.options)
+            require(result.prompt.length <= 600)
+            if(result.kind == Kind.CLOZE) require("____" in result.prompt)
             return result
         }
     }

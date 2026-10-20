@@ -58,8 +58,8 @@
             android:layout_alignParentEnd="true"
             android:layout_centerVertical="true"
             android:background="@drawable/bg_circle_translucent"
-            android:contentDescription="开启手电筒"
-            android:src="@android:drawable/ic_menu_always_landscape_portrait"
+            android:contentDescription="打开手电筒"
+            android:src="@drawable/ic_flashlight"
             android:tint="#FFFFFF" />
     </RelativeLayout>
 

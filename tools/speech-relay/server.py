@@ -1,4 +1,4 @@
-"""青简手机朗读连接工具：仅转发用户点击的译词，使用 Python 标准库。"""
+"""青简手机连接工具：朗读转发与本机授权的中文笔记工作流，使用 Python 标准库。"""
 
 import argparse
 import hmac
@@ -23,14 +23,17 @@ from voice_packs import VoicePacks
 from speech_control import SpeechControl
 from app_updates import AppUpdates
 from update_http import send_package
+from notes.jobs import NoteJobs
+from notes.provider import generate
+from learning_sync import LearningSync
 
 
 class SpeechState:
-    """只保存最新一次点击，不积累输入历史或待播放队列。"""
+    """朗读只保存最新一次点击；笔记任务另有有界临时缓存，不积累输入历史。"""
 
     def __init__(self, token, addresses, pairing=None, control=None):
         self.token = token
-        # 手机链接只有接收权限；隧道代理在本机，不能只凭回环来源信任发布请求。
+        # 手机仅接收和调用已获本机授权的笔记工作流；发布/管理仍用独立凭证。
         self.publish_token = secrets.token_hex(16)
         self.addresses = addresses
         self.public_url = ""
@@ -44,6 +47,8 @@ class SpeechState:
         self.control = control
         self.stopping = threading.Event()
         self.updates = None
+        self.notes = None
+        self.learning = None
 
     def publish(self, text):
         with self.condition:
@@ -123,6 +128,24 @@ class SpeechHandler(BaseHTTPRequestHandler):
 
     def do_GET(self):
         request = urlsplit(self.path)
+        if request.path == "/api/learning/words":
+            if not self.authenticated(): return
+            try:
+                if not self.server.state.learning:
+                    self.reply(503, {"error": "学习同步未启用"})
+                else:
+                    self.reply(200, self.server.state.learning.words())
+            except (OSError, ValueError):
+                self.reply(503, {"error": "电脑生词来源暂不可用"})
+            return
+        if request.path.startswith("/api/notes/"):
+            if not self.notes_allowed(): return
+            try:
+                status, data = self.server.state.notes.get(request.path.removeprefix("/api/notes/"))
+                self.reply(status, data)
+            except ValueError as error:
+                self.reply(400, {"error": str(error)})
+            return
         if request.path == "/":
             page = Path(__file__).with_name("receiver.html").read_bytes()
             self.reply(200, page, "text/html; charset=utf-8")
@@ -230,6 +253,28 @@ class SpeechHandler(BaseHTTPRequestHandler):
 
     def do_POST(self):
         path = urlsplit(self.path).path
+        if path == "/api/learning/backup":
+            if not self.authenticated(): return
+            try:
+                length = int(self.headers.get("Content-Length", "0"))
+                if self.headers.get_content_type() != "application/json" or not 1 <= length <= 20 * 1024 * 1024:
+                    raise ValueError("备份长度无效")
+                if not self.server.state.learning:
+                    self.reply(503, {"error": "请更新电脑连接工具"})
+                    return
+                data = json.loads(self.rfile.read(length).decode("utf-8"))
+                self.reply(200, self.server.state.learning.backup(data))
+            except (OSError, ValueError, UnicodeDecodeError):
+                self.reply(400, {"error": "学习备份未保存，请检查格式和电脑空间"})
+            return
+        if path == "/api/notes":
+            if not self.notes_allowed(): return
+            try:
+                status, data = self.server.state.notes.start(self.json_body())
+                self.reply(status, data)
+            except (ValueError, UnicodeError):
+                self.reply(400, {"error": "请提交有效的英文词条和请求编号（最多 100 字）"})
+            return
         if path in ("/api/admin/control", "/api/admin/stop", "/api/device"):
             if not (self.authenticated() if path == "/api/device" else self.local_admin()):
                 return
@@ -279,6 +324,17 @@ class SpeechHandler(BaseHTTPRequestHandler):
             return
         self.reply(202, {"sequence": sequence})
 
+    def notes_allowed(self):
+        if not self.authenticated(): return False
+        state = self.server.state
+        if not state.notes:
+            self.reply(503, {"error": "请更新电脑手机连接工具"})
+            return False
+        if not state.control or not state.control.snapshot().get("allow_notes", False):
+            self.reply(403, {"error": "请在电脑连接工具启用中文笔记工作流"})
+            return False
+        return True
+
 
 def local_addresses():
     """列出本机局域网 IPv4 地址，不连接外部服务。"""
@@ -321,6 +377,8 @@ def main():
     state_file = args.state_file or root / "connection.toml"
     state.control = SpeechControl(state_file.parent, VoicePacks(state_file.parent / "packs"))
     state.updates = AppUpdates(state_file.parent / "updates")
+    state.learning = LearningSync(state_file.parent / "learning-backups", root.parent / "user-vocab.tsv")
+    state.notes = NoteJobs(generate)
     connection_settings = f'port = {args.port}\ntoken = "{state.publish_token}"\n'
     tunnel = QuickTunnel(args.cloudflared, args.port) if args.internet else None
     server_thread = threading.Thread(target=server.serve_forever, daemon=True)
@@ -364,6 +422,7 @@ def main():
         print(str(error), file=sys.stderr, flush=True)
         exit_code = 1
     finally:
+        state.notes.close()
         if tunnel:
             tunnel.close()
         server.shutdown()

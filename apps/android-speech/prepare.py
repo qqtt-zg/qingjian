@@ -26,8 +26,8 @@ for item in json.loads((root / "dependencies.json").read_text()):
         with tarfile.open(target) as archive:
             members = archive.getmembers()
             if item["name"] == "kokoro-multi-lang-v1_0.tar.bz2":
-                # App 只需要英文发音数据；官方辅助脚本、其他语言词典不随包。
-                required = {"model.onnx", "tokens.txt", "voices.bin", "lexicon-us-en.txt", "LICENSE"}
-                members = [member for member in members if member.name.split("/", 1)[-1] in required or member.name.startswith("kokoro-multi-lang-v1_0/espeak-ng-data/")]
+                # 中英文共用同一模型；补齐词典与分词数据，辅助脚本不随包。
+                required = {"model.onnx", "tokens.txt", "voices.bin", "lexicon-us-en.txt", "lexicon-zh.txt", "date-zh.fst", "number-zh.fst", "phone-zh.fst", "LICENSE"}
+                members = [member for member in members if member.name.split("/", 1)[-1] in required or member.name.startswith("kokoro-multi-lang-v1_0/espeak-ng-data/") or member.name.startswith("kokoro-multi-lang-v1_0/dict/") and not member.name.endswith(".py")]
             archive.extractall(assets, members=members, filter="data")
 print("官方依赖校验与准备完成")

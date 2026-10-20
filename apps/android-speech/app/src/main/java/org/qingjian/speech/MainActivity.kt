@@ -1,4 +1,4 @@
-//! 统一设置与低频朗读配置页；共用偏好和声音控制，不读取剪贴板或修改系统 TTS。
+//! 电脑连接与独立朗读配置页；共用接收和声音控制，不读取剪贴板或修改系统 TTS。
 package org.qingjian.speech
 
 import androidx.activity.ComponentActivity
@@ -32,6 +32,9 @@ import org.qingjian.speech.rate.RateControls
 
 open class MainActivity : ComponentActivity() {
     protected open val settingsPage = false
+    private val connectionControls by lazy { org.qingjian.speech.learning.ConnectionControls(this) }
+    private var quickScan = false
+    private var finishAfterPermission = false
     private val handler = Handler(Looper.getMainLooper())
     private lateinit var status: TextView
     private lateinit var address: EditText
@@ -49,18 +52,16 @@ open class MainActivity : ComponentActivity() {
     private var rateControls: RateControls? = null
     private var updateSummary: TextView? = null
     private var aiSummary: TextView? = null
+    private var chineseControls: ChineseVoiceControls? = null
     private val scanner = registerForActivityResult(ScanContract()) { result -> acceptScan(result.contents) }
 
     /** 扫码结果只作为配对地址校验，不打开浏览器或执行二维码中的其他内容。 */
     fun acceptScan(contents: String?) {
-        if (contents == null) { report("已取消扫码，原连接地址保留"); return }
-        connect(contents)
-    }
-
-    private fun report(message: String) {
-        getSharedPreferences("speech", 0).edit().putString("status", message).apply()
-        status.text = message
-        updateStatusColor(message)
+        if(contents == null) Toast.makeText(this, "已取消扫码，原连接保留", Toast.LENGTH_SHORT).show()
+        else if(connectionControls.connect(contents)) address.setText(contents.trim())
+        if(quickScan) {
+            if(connectionControls.permissionRequested) finishAfterPermission = true else finish()
+        }
     }
 
     private fun updateStatusColor(message: String) {
@@ -73,25 +74,11 @@ open class MainActivity : ComponentActivity() {
         status.setTextColor(color)
     }
 
-    private fun connect(value: String) {
-        try {
-            val url = value.trim()
-            Pairing.parse(url)
-            getSharedPreferences("speech", 0).edit().putString("url", url).apply()
-            address.setText(url)
-            report("正在连接…")
-            startSpeech("connect")
-        } catch (_: Exception) {
-            report("连接未启动，请先扫码，或在朗读设置检查配对地址")
-        }
-    }
-
     private val refresh = object : Runnable {
         override fun run() {
             val prefs = getSharedPreferences("speech", 0)
-            val currentStatus = prefs.getString("status", "准备就绪") ?: "准备就绪"
-            status.text = currentStatus
-            updateStatusColor(currentStatus)
+            val currentStatus = prefs.getString("connection_status", null) ?: prefs.getString("status", "准备就绪") ?: "准备就绪"
+            if(settingsPage) { status.text = currentStatus; updateStatusColor(currentStatus) }
             received.text = "最近接收：" + (prefs.getString("last_receive", "尚未收到电脑请求") ?: "尚未收到电脑请求")
             playback.text = "最近朗读：" + (prefs.getString("last_playback", "尚未试播或朗读") ?: "尚未试播或朗读")
             gainSummary?.text = "音量增强：${(prefs.getFloat("gain", 1f).coerceIn(0.5f, 4f) * 100).toInt()}%"
@@ -134,7 +121,7 @@ open class MainActivity : ComponentActivity() {
         try {
             Pairing.parse(value)
             getSharedPreferences("speech", 0).edit().putString("url", value).apply()
-            Toast.makeText(this, "配对地址已保存，返回设置后点击连接生效", Toast.LENGTH_LONG).show()
+            Toast.makeText(this, "配对地址已保存，点击常驻条重连图标生效", Toast.LENGTH_LONG).show()
         } catch (_: Exception) { address.error = "请填写电脑配对页的完整 HTTPS 地址" }
     }
 
@@ -155,16 +142,14 @@ open class MainActivity : ComponentActivity() {
 
     override fun onCreate(state: Bundle?) {
         super.onCreate(state)
+        quickScan = state?.getBoolean("quick_scan") ?: intent.getBooleanExtra("return_after_scan", false)
+        finishAfterPermission = state?.getBoolean("finish_after_permission") ?: false
         BundledVoice.initializeSelection(this)
         volumeControlStream = android.media.AudioManager.STREAM_MUSIC
         val ui = Views(this)
         val root = ui.column()
-        if(settingsPage) root.addView(ui.header("朗读设置"))
+        root.addView(ui.header(if(settingsPage) "朗读设置" else "电脑连接"))
         root.addView(layoutInflater.inflate(R.layout.activity_main, root, false), LinearLayout.LayoutParams(-1, 0, 1f))
-        if(!settingsPage) root.addView(Navigation.create(this, "settings") { page ->
-            startActivity(Intent(this, LearningActivity::class.java).putExtra("page", page)
-                .addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP))
-        })
         ui.insets(root)
         setContentView(root)
 
@@ -182,24 +167,15 @@ open class MainActivity : ComponentActivity() {
         address.setText(prefs.getString("url", ""))
 
         // 扫码主按钮 (启动全新现代化沉浸式扫码界面)
-        findViewById<Button>(R.id.btnScan).setOnClickListener {
-            scanner.launch(
-                ScanOptions()
-                    .setCaptureActivity(ScanActivity::class.java)
-                    .setDesiredBarcodeFormats(ScanOptions.QR_CODE)
-                    .setPrompt("")
-                    .setBeepEnabled(false)
-                    .setOrientationLocked(false)
-            )
-        }
+        findViewById<Button>(R.id.btnScan).setOnClickListener { launchScanner() }
+
 
         // 连接与停止
         findViewById<Button>(R.id.btnConnect).setOnClickListener {
-            if(settingsPage) savePairingAddress() else connect(address.text.toString())
+            if(settingsPage) savePairingAddress() else connectionControls.reconnect()
         }
         findViewById<Button>(R.id.btnStop).setOnClickListener {
-            stopService(Intent(this, ReceiverService::class.java))
-            report("已停止接收")
+            connectionControls.stop()
         }
 
         // 音色选择与试播
@@ -262,7 +238,15 @@ open class MainActivity : ComponentActivity() {
                 .show()
         }
         arrangePage(ui)
+        if(!settingsPage && state == null && intent.getBooleanExtra("scan_now", false)) {
+            intent.removeExtra("scan_now"); launchScanner()
+        }
 
+    }
+
+    private fun launchScanner() {
+        scanner.launch(ScanOptions().setCaptureActivity(ScanActivity::class.java)
+            .setDesiredBarcodeFormats(ScanOptions.QR_CODE).setPrompt("").setBeepEnabled(false).setOrientationLocked(true))
     }
 
     private fun startSpeech(action: String) {
@@ -275,6 +259,7 @@ open class MainActivity : ComponentActivity() {
 
     override fun onResume() {
         super.onResume()
+        chineseControls?.resume()
         if(!settingsPage) address.setText(getSharedPreferences("speech", 0).getString("url", ""))
         aiSummary?.text = if(runCatching { Credentials(this).load().validate() }.isSuccess) "已保存 API 配置" else "尚未配置 AI 接口"
         applyGain((getSharedPreferences("speech", 0).getFloat("gain", 1f).coerceIn(0.5f, 4f) * 100).toInt())
@@ -313,38 +298,44 @@ open class MainActivity : ComponentActivity() {
         show(licenseParent.getChildAt(licenseParent.indexOfChild(license) - 1), false)
         if(settingsPage) {
             show(findViewById<View>(R.id.tvHeaderTitle).parent.parent as View, false)
-            findViewById<TextView>(R.id.tvPairingLabel).text = "手动配对地址（保存后返回设置，点击连接生效）"
+            findViewById<TextView>(R.id.tvPairingLabel).text = "手动配对地址（保存后点击重连图标生效）"
             findViewById<Button>(R.id.btnConnect).text = "保存配对地址"
             val voiceContainer = voiceCard as ViewGroup
             rateControls = RateControls(this).also { voiceContainer.addView(it.view, voiceContainer.indexOfChild(findViewById(R.id.btnTestSpeech))) }
+            chineseControls=ChineseVoiceControls(this).also {voiceContainer.addView(it.view,voiceContainer.indexOfChild(findViewById(R.id.btnTestSpeech)))}
+            chineseControls?.resume()
             return
         }
-        findViewById<TextView>(R.id.tvHeaderTitle).text = "设置"
-        findViewById<TextView>(R.id.tvHeaderSubtitle).text = "朗读、AI 与应用选项"
-        column.addView(ui.text("朗读与连接", 20f), 1)
-        val quick = ui.card(column) { content ->
-            voiceSummary = ui.text("").also { content.addView(it) }
-            gainSummary = ui.text("", 13f, true).also { content.addView(it) }
-            rateSummary = ui.text("", 13f, true).also { content.addView(it) }
-            content.addView(ui.button("朗读设置") { startActivity(Intent(this, SpeechSettingsActivity::class.java)) })
+        show(findViewById<View>(R.id.tvHeaderTitle).parent.parent as View, false)
+        val root = column.parent.parent as LinearLayout
+        val originalStatus = findViewById<View>(R.id.connectionStatusRow)
+        card(originalStatus.parent as View, false)
+        card(diagnosticCard, true)
+        for(id in listOf(R.id.tvStatus, R.id.btnScan, R.id.btnConnect, R.id.btnStop)) findViewById<View>(id).id = View.NO_ID
+        val bar = org.qingjian.speech.learning.ConnectionBar(this, connectionControls) { launchScanner() }
+        bar.statusView.id = R.id.tvStatus
+        bar.scanButton.id = R.id.btnScan
+        bar.reconnectButton.id = R.id.btnConnect
+        bar.stopButton.id = R.id.btnStop
+        status = bar.statusView
+        root.addView(bar.view, 1, LinearLayout.LayoutParams(-1, -2))
+    }
+
+    override fun onSaveInstanceState(outState: Bundle) {
+        outState.putBoolean("quick_scan", quickScan); outState.putBoolean("finish_after_permission", finishAfterPermission)
+        super.onSaveInstanceState(outState)
+    }
+
+    override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<String>, grantResults: IntArray) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+        if(requestCode == org.qingjian.speech.learning.ConnectionControls.NOTIFICATIONS) {
+            connectionControls.permissionFinished()
+            if(quickScan && finishAfterPermission) finish()
         }
-        column.removeView(quick)
-        column.addView(quick, column.indexOfChild(voiceCard))
-        ui.card(column) { content ->
-            content.addView(ui.text("AI 老师", 20f))
-            aiSummary = ui.text("", 13f, true).also { content.addView(it) }
-            content.addView(ui.button("配置与测试 AI") { startActivity(Intent(this, SettingsActivity::class.java)) })
-        }
-        ui.card(column) { content ->
-            content.addView(ui.text("应用更新", 20f))
-            updateSummary = ui.text("", 13f, true).also { content.addView(it) }
-            content.addView(ui.button("应用更新") { startActivity(Intent(this, org.qingjian.speech.update.UpdateActivity::class.java)) })
-        }
-        column.addView(ui.button("数据与关于") { startActivity(Intent(this, DataSettingsActivity::class.java)) })
-        refreshVoices()
     }
 
     override fun onPause() {
+        chineseControls?.close()
         handler.removeCallbacks(refresh)
         super.onPause()
     }

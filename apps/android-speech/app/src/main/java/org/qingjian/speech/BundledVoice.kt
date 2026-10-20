@@ -21,7 +21,7 @@ object BundledVoice {
         if(!prefs.contains("voice")) prefs.edit().putInt("voice",1).apply()
     }
 
-    fun create(context: Context, voice: Int=0): OfflineTts {
+    @Synchronized fun create(context: Context, voice: Int=0): OfflineTts {
         val heart=voice==1
         val name = if(heart) "kokoro-multi-lang-v1_0" else "kitten-nano-en-v0_1-fp16"
         val root = File(context.filesDir,name)
@@ -29,11 +29,15 @@ object BundledVoice {
             copy(context,name,root)
             File(root,"ready-v1").writeText("1")
         }
+        if(heart && !File(root,"ready-zh-v1").exists()) {
+            for(child in listOf("lexicon-zh.txt","dict","date-zh.fst","number-zh.fst","phone-zh.fst"))copy(context,"$name/$child",File(root,child))
+            File(root,"ready-zh-v1").writeText("1")
+        }
         if(heart) return OfflineTts(config=OfflineTtsConfig(model=OfflineTtsModelConfig(
             kokoro=OfflineTtsKokoroModelConfig(model=File(root,"model.onnx").path,
                 voices=File(root,"voices.bin").path, tokens=File(root,"tokens.txt").path,
-                lexicon=File(root,"lexicon-us-en.txt").path,
-                dataDir=File(root,"espeak-ng-data").path,lang="en-us"),numThreads=2)))
+                lexicon=File(root,"lexicon-us-en.txt").path+","+File(root,"lexicon-zh.txt").path,
+                dataDir=File(root,"espeak-ng-data").path,dictDir=File(root,"dict").path,lang=""),numThreads=2)))
         return OfflineTts(config=OfflineTtsConfig(model=OfflineTtsModelConfig(
             kitten=OfflineTtsKittenModelConfig(model=File(root,"model.fp16.onnx").path,
                 voices=File(root,"voices.bin").path, tokens=File(root,"tokens.txt").path,

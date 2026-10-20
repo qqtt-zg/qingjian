@@ -37,5 +37,11 @@ class ProbeUi(private val test: Instrumentation) {
         return null
     }
 
-    fun click(activity: Activity, label: String) = main { check(checkNotNull(button(activity.window.decorView, label)).performClick()) }
+    fun target(view: View, label: String): View? {
+        if(view.contentDescription?.toString() == label || view is Button && view.text.toString() == label) return view
+        if(view is ViewGroup) for(i in 0 until view.childCount) target(view.getChildAt(i), label)?.let { return it }
+        return null
+    }
+
+    fun click(activity: Activity, label: String) = main { check(checkNotNull(target(activity.window.decorView, label)) { "找不到控件：$label" }.performClick()) }
 }

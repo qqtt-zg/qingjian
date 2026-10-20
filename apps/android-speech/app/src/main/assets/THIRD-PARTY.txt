@@ -1,4 +1,6 @@
 Qingjian Speech receiver: GPL-3.0, source in apps/android-speech.
+Launcher glyph: Noto Serif SC Regular, SIL Open Font License 1.1. https://github.com/google/fonts/tree/main/ofl/notoserifsc
+Only the outline of 简 is bundled; license: assets/licenses/noto-serif-sc-OFL.txt. No font file is bundled.
 KittenTTS nano 0.1 weights: Apache-2.0. https://huggingface.co/KittenML/kitten-tts-nano-0.1
 Kokoro 1.0 weights and af_heart voice: Apache-2.0. https://huggingface.co/hexgrad/Kokoro-82M
 Sherpa-ONNX Kokoro model package: https://github.com/k2-fsa/sherpa-onnx/releases/download/tts-models/kokoro-multi-lang-v1_0.tar.bz2
@@ -6,7 +8,16 @@ The bundled Kokoro LICENSE is preserved in assets/kokoro-multi-lang-v1_0/LICENSE
 sherpa-onnx v1.13.8: Apache-2.0. https://github.com/k2-fsa/sherpa-onnx/tree/v1.13.8
 ONNX Runtime: MIT. https://github.com/microsoft/onnxruntime
 eSpeak NG data: GPL-3.0. https://github.com/espeak-ng/espeak-ng
-This app bundles native libraries and English voice data; no system TTS configuration required.
+This app bundles native libraries and Chinese/English voice data; no system TTS configuration required.
 
 QR scanner: ZXing Android Embedded 4.3.0 and ZXing Core 3.4.1, Apache-2.0. https://github.com/journeyapps/zxing-android-embedded
 AndroidX Activity 1.9.3, Apache-2.0. https://developer.android.com/jetpack/androidx/releases/activity
+
+Koog agents-core 1.3.0 and its Koog modules: Apache-2.0. https://github.com/JetBrains/koog/tree/1.3.0
+Koog copyright and license: assets/licenses/koog-LICENSE.txt
+Kotlin, kotlinx.coroutines 1.10.2, kotlinx.serialization 1.10.0, kotlinx.datetime, kotlinx.io and Ktor: Apache-2.0. https://github.com/JetBrains
+SLF4J 2.0.17 (NOP logging provider): MIT. https://www.slf4j.org/license.html
+kotlin-logging: Apache-2.0. https://github.com/oshai/kotlin-logging
+
+Jieba dictionary resources: MIT. https://github.com/fxsjy/jieba ; license in assets/licenses/jieba-MIT.txt.
+CppJieba dictionaries: MIT. https://github.com/yanyiwu/cppjieba ; license in assets/licenses/cppjieba-MIT.txt.

@@ -123,33 +123,28 @@ object LearningProbe {
         }
         val home = test.startActivitySync(Intent(context, LearningActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) as LearningActivity
         test.runOnMainSync {
-            click(home.window.decorView, "词汇")
+            click(home.window.decorView, "词库")
             check(text(home.window.decorView).contains("Control"))
-            click(home.window.decorView, "复习")
+            click(home.window.decorView, "学习")
+            click(home.window.decorView, "复习一下，记得更牢")
             click(home.window.decorView, "开始复习")
             click(home.window.decorView, "查看笔记")
             click(home.window.decorView, "这次记住了")
             check(text(home.window.decorView).contains("本轮完成"))
         }
-        val speechMonitor = test.addMonitor(MainActivity::class.java.name, null, false)
+        test.runOnMainSync { ToolbarProbe.back(home) }
+        val settingsMonitor = test.addMonitor(org.qingjian.speech.learning.SettingsHomeActivity::class.java.name, null, false)
         test.runOnMainSync { click(home.window.decorView, "设置") }
-        val speech = test.waitForMonitorWithTimeout(speechMonitor, 10000) as? MainActivity
-            ?: error("设置标签没有打开统一设置页")
-        test.removeMonitor(speechMonitor)
+        val directory = test.waitForMonitorWithTimeout(settingsMonitor, 10000) as? org.qingjian.speech.learning.SettingsHomeActivity
+            ?: error("没有打开统一设置页")
+        test.removeMonitor(settingsMonitor)
         test.runOnMainSync {
-            check(speech.findViewById<View>(R.id.btnScan) != null)
-            check(text(speech.window.decorView).contains("最近朗读"))
-            check(text(speech.window.decorView).contains("词汇"))
-            check(text(speech.window.decorView).contains("配置与测试 AI"))
-            check(text(speech.window.decorView).contains("应用更新"))
-            check(!text(speech.window.decorView).contains("打开朗读设置"))
+            check(text(directory.window.decorView).contains("配置与测试 AI"))
+            check(text(directory.window.decorView).contains("应用更新"))
+            ToolbarProbe.back(directory)
         }
-        test.runOnMainSync { click(speech.window.decorView, "复习") }
         test.waitForIdleSync()
-        test.runOnMainSync {
-            check(text(home.window.decorView).contains("本轮完成"))
-            home.finish()
-        }
+        test.runOnMainSync { click(home.window.decorView, "复习一下，记得更牢"); check(text(home.window.decorView).contains("本轮完成")); home.finish() }
         val tutor = test.startActivitySync(Intent(context, TutorActivity::class.java).putExtra("word_id", id).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) as TutorActivity
         test.runOnMainSync {
             tutor.findViewById<EditText>(TutorActivity.ID_QUESTION).setText("下班后保存的问题")
@@ -162,15 +157,13 @@ object LearningProbe {
         while(store.messages("word:$id").last().state != "failed" && System.nanoTime() < deadline) Thread.sleep(50)
         check(store.messages("word:$id").last().state == "failed")
         test.runOnMainSync { tutor.finish() }
-        return "PASS SQLite counts/search/review/chat isolation, encrypted credentials, HTTPS validation, Chat Completions payload/parser/redirect/429/cancel, four-tab unified settings/return/review retention and offline questions"
+        return "PASS SQLite counts/search/review/chat isolation, encrypted credentials, HTTPS validation, Chat Completions payload/parser/redirect/429/cancel, three-tab learning/settings return/review retention and offline questions"
     }
 
     private fun click(view: View, label: String) {
-        if(view is Button && view.text.toString() == label) { check(view.performClick()); return }
+        if(view.contentDescription?.toString() == label || view is Button && view.text.toString() == label) { check(view.performClick()); return }
         if(view is ViewGroup) for(index in 0 until view.childCount) {
-            if(text(view.getChildAt(index)).contains(label)) {
-                runCatching { click(view.getChildAt(index), label) }.onSuccess { return }
-            }
+            runCatching { click(view.getChildAt(index), label) }.onSuccess { return }
         }
         error("找不到按钮：$label")
     }

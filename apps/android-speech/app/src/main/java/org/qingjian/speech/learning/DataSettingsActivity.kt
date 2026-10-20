@@ -15,9 +15,9 @@ class DataSettingsActivity : Activity() {
         column.addView(ui.text("青简学习 ${current.versionName}", muted = true))
         ui.card(column) { card ->
             card.addView(ui.text("本机学习资料", 20f))
-            card.addView(ui.text("词汇、中文笔记、AI 对话、测验与跟读录音保存在本机。", muted = true))
+            card.addView(ui.text("词汇、中文笔记、AI 对话与操作草稿、测验和跟读录音保存在本机。", muted = true))
             card.addView(ui.button("清空本机学习记录") {
-                AlertDialog.Builder(this).setMessage("删除所有词汇、中文笔记、AI 对话、测验记录和跟读录音？电脑配对、音色与 API 配置保留。")
+                AlertDialog.Builder(this).setMessage("删除所有词汇、中文笔记、AI 对话、操作草稿、测验记录和跟读录音？电脑配对、音色与 API 配置保留。")
                     .setNegativeButton("取消", null).setPositiveButton("删除") { _, _ ->
                         LearningStore.get(this).clearLearning()
                         AlertDialog.Builder(this).setMessage("本机学习记录已清空").setPositiveButton("确定", null).show()

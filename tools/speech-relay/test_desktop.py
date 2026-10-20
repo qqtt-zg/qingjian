@@ -43,6 +43,21 @@ class DesktopToolTests(unittest.TestCase):
             root = Path(directory)
             self.assert_start_uses(root / "tools/speech-relay/desktop.py", "path-tool", "path-tool")
 
+    def test_notes_reuses_current_relay_without_changing_pairing(self):
+        with patch.object(desktop,"start") as start, patch.object(desktop,"request",return_value={"control":{"allow_notes":False}}) as request:
+            desktop.start_notes()
+            start.assert_called_once()
+            request.assert_any_call("/api/admin/control",{"allow_notes":True})
+            self.assertNotIn("/api/admin/stop",[call.args[0] for call in request.call_args_list])
+
+    def test_notes_restarts_old_helper_before_authorization(self):
+        with patch.object(desktop,"start") as start, patch.object(desktop,"request",return_value={"control":{}}) as request, \
+                patch.object(desktop,"snapshot",return_value={"running":False}), patch.object(desktop.time,"sleep"):
+            desktop.start_notes()
+            self.assertEqual(start.call_count,2)
+            self.assertEqual([call.args[0] for call in request.call_args_list],
+                             ["/api/admin","/api/admin/stop","/api/admin/control"])
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -1,5 +1,6 @@
 ﻿# 手机朗读连接工具；保持此终端运行，关闭后立即停止转发。
 param(
+    [switch]$Notes,
     [switch]$Internet,
     [string]$Cloudflared,
     [switch]$Tailscale,
@@ -8,6 +9,14 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
+if ($Notes) {
+    if ($Tailscale -or $ResetPairing -or $Cloudflared) { throw '-Notes 使用桌面临时 HTTPS 连接；其他模式请先启动再运行 desktop.py notes-enable' }
+    $notesHelper = Join-Path $PSScriptRoot 'desktop.py'
+    if (Get-Command python -ErrorAction SilentlyContinue) { & python -B $notesHelper start-notes }
+    elseif (Get-Command py -ErrorAction SilentlyContinue) { & py -3 $notesHelper start-notes }
+    else { throw '中文笔记工作流需要 Python 3.11 或以上版本' }
+    exit $LASTEXITCODE
+}
 if ($Internet -and $Tailscale) { throw '临时公网与 Tailscale 模式只能选择一个' }
 $scriptPath = Join-Path $PSScriptRoot 'server.py'
 $relayArguments = @($scriptPath, '--open')

@@ -1,4 +1,4 @@
-//! 学习优先的四入口首页；朗读与应用配置集中在统一设置页。
+//! 学习主页与紧凑词库；复习在学习流程中展开，AI 是独立主入口。
 package org.qingjian.speech.learning
 
 import android.app.Activity
@@ -21,6 +21,7 @@ class LearningActivity : Activity() {
     private lateinit var body: LinearLayout
     private var page = "today"
     private var query = ""
+    private var filter = "全部"
     private var reviewIndex = 0
     private var flipped = false
     private var remembered = 0
@@ -31,8 +32,14 @@ class LearningActivity : Activity() {
         super.onCreate(state)
         ui = Views(this)
         page = (state?.getString("page") ?: intent.getStringExtra("page"))
-            ?.takeIf { value -> Navigation.pages.any { it.first == value && value != "settings" } } ?: "today"
+            ?.takeIf { value -> value in listOf("today", "words", "review") } ?: "today"
         query = state?.getString("query").orEmpty()
+        filter = state?.getString("filter") ?: "全部"
+        reviewWords = state?.getLongArray("review_ids")?.toList()?.mapNotNull { store.word(it) }.orEmpty()
+        if(state?.getLongArray("review_ids")?.size != reviewWords.size) reviewWords = emptyList()
+        reviewIndex = state?.getInt("review_index", 0)?.coerceIn(0, reviewWords.size) ?: 0
+        remembered = state?.getInt("remembered", 0)?.coerceIn(0, reviewWords.size) ?: 0
+        flipped = state?.getBoolean("flipped") ?: false
     }
 
     override fun onResume() {
@@ -43,10 +50,15 @@ class LearningActivity : Activity() {
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         setIntent(intent)
-        intent.getStringExtra("page")?.takeIf { value -> Navigation.pages.any { it.first == value && value != "settings" } }?.let { page = it }
+        intent.getStringExtra("page")?.takeIf { value -> value in listOf("today", "words", "review") }?.let { page = it }
         render()
     }
-    override fun onSaveInstanceState(out: Bundle) { out.putString("page", page); out.putString("query", query); super.onSaveInstanceState(out) }
+    override fun onSaveInstanceState(out: Bundle) {
+        out.putString("page", page); out.putString("query", query); out.putString("filter", filter)
+        out.putLongArray("review_ids", reviewWords.map { it.id }.toLongArray())
+        out.putInt("review_index", reviewIndex); out.putInt("remembered", remembered); out.putBoolean("flipped", flipped)
+        super.onSaveInstanceState(out)
+    }
 
     private fun openTutor(word: VocabularyEntry? = null) {
         startActivity(Intent(this, TutorActivity::class.java).putExtra("word_id", word?.id ?: 0))
@@ -55,54 +67,77 @@ class LearningActivity : Activity() {
     private fun render() {
         val root = ui.column()
         body = ui.column()
+        if(page == "review") root.addView(ui.header("复习与练习").apply {
+            setNavigationOnClickListener { page = "today"; render() }
+        }) else root.addView(MainHeader.create(this, if(page == "today") "青简" else "我的词库"))
         when(page) {
             "words" -> vocabulary()
             "review" -> review()
             else -> today()
         }
         root.addView(ui.scroll(body), LinearLayout.LayoutParams(-1, 0, 1f))
-        val nav = Navigation.create(this, page) { selected ->
-            if(selected == "settings") startActivity(Intent(this, MainActivity::class.java)
-                .addFlags(Intent.FLAG_ACTIVITY_REORDER_TO_FRONT or Intent.FLAG_ACTIVITY_SINGLE_TOP))
-            else { page = selected; render() }
-        }
-        root.addView(nav); ui.insets(root); setContentView(root)
+        if(page != "review") root.addView(Navigation.create(this, page) { selected ->
+            if(selected in listOf("ai","me")) Navigation.open(this, selected) else { page = selected; render() }
+        })
+        ui.insets(root); setContentView(root)
     }
 
     private fun today() {
         val words = store.words()
-        body.addView(ui.title("今天，再认识几个词"))
-        val speech = getSharedPreferences("speech", 0).getString("status", "尚未连接电脑")
-        body.addView(ui.text("朗读连接：$speech\n学习资料与历史回答保存在手机，离线可查看。", 13f, true))
-        ui.card(body) { card ->
-            card.addView(ui.text("我的词汇", 20f))
-            card.addView(ui.text(if(words.isEmpty()) "还没有学习条目" else "最近收录 ${words.size} 个词／短语"))
-            card.addView(ui.text("电脑点击小喇叭后自动收录，也可以在词汇页手动添加。收到请求与完整播放分别记录。", 13f, true))
-            card.addView(ui.button("打开词汇本", true) { page = "words"; render() })
+        val preferences = StudyPreferences(this)
+        val records=org.qingjian.speech.learning.archive.Store(this).events()
+        val recentMistake=records.asReversed().firstNotNullOfOrNull {e->if(e.getJSONObject("data").has("correct")&&!e.getJSONObject("data").optBoolean("correct"))store.word(e.optLong("word_id"))?.takeIf {it.meaning.isNotBlank()} else null}
+        val available=recentMistake ?: store.word(preferences.lastWord)?.takeIf {it.meaning.isNotBlank()} ?: words.firstOrNull {it.meaning.isNotBlank()}
+        body.addView(ui.caption("日常输入 · 拼写优先"));body.addView(ui.title("把常用词，\n写得更稳一点。"));body.addView(ui.caption("先巩固用过的词，再慢慢扩展。"))
+        ui.card(body){card->
+            card.background=ui.shape(ui.color(org.qingjian.speech.R.color.hero_background),22)
+            card.addView(ui.caption("继续今天的学习").apply {setTextColor(ui.color(org.qingjian.speech.R.color.hero_secondary))})
+            card.addView(ui.word(available?.english ?: "从一个词开始").apply {textSize=34f;setTextColor(android.graphics.Color.WHITE)})
+            card.addView(ui.text(available?.meaning ?: "先添加词汇和中文笔记，就能开始离线拼写。",14f).apply {setTextColor(ui.color(org.qingjian.speech.R.color.hero_secondary))})
+            val last=records.lastOrNull {it.optLong("word_id")==available?.id&&it.getJSONObject("data").has("correct")}
+            card.addView(ui.caption(if(last==null)"先试着独立回忆，需要时再看提示。" else if(last.getJSONObject("data").optBoolean("assisted"))"上次使用过提示，这次试试独立完成。" else if(last.getJSONObject("data").optBoolean("correct"))"上次独立答对，可以再巩固一次。" else "上次还有拼写错误，今天再练一次。").apply {setTextColor(ui.color(org.qingjian.speech.R.color.hero_secondary))})
+            card.addView(ui.button(if(available==null)"去词库添加" else "开始练拼写",true){if(available==null){page="words";render()}else startActivity(Intent(this,WordStudyActivity::class.java).putExtra("word_id",available.id).putExtra("open_spelling",true))}.apply {background=ui.shape(ui.color(org.qingjian.speech.R.color.hero_text),12);setTextColor(ui.color(org.qingjian.speech.R.color.hero_background))})
         }
-        ui.card(body) { card ->
-            card.addView(ui.text("今天遇到了什么疑问？", 20f))
-            card.addView(ui.text("词性、选词、搭配、例句，都可以继续追问。", muted = true))
-            card.addView(ui.button("问一问 AI 老师", true) { openTutor() })
-        }
-        if(words.isNotEmpty()) {
-            body.addView(ui.text("最近的学习条目", 18f))
-            words.take(3).forEach { wordCard(body, it) }
-        }
+        body.addView(ui.caption("按自己的节奏来 · 每天 ${preferences.minutes} 分钟"))
+        body.addView(ui.menuRow("独立小测", "拼写、听写与语境填词，交卷后看结果", org.qingjian.speech.R.drawable.ic_book) {
+            startActivity(Intent(this,org.qingjian.speech.learning.exam.ExamActivity::class.java))
+        })
+        ui.divider(body)
+        body.addView(ui.menuRow("问问 AI 老师", "根据实际记录，决定先巩固还是扩展", org.qingjian.speech.R.drawable.ic_spark) {
+            startActivity(Intent(this, TutorActivity::class.java).putExtra("home_tab", true))
+        })
+        ui.divider(body)
+        val plan=org.qingjian.speech.learning.daily.PlanStore(this).current()
+        body.addView(ui.menuRow(if(plan==null)"安排今天学习" else "继续今天学习",plan?.title ?: "让老师安排少量新词与复习",org.qingjian.speech.R.drawable.ic_study){startActivity(Intent(this,org.qingjian.speech.learning.daily.StudyActivity::class.java).putExtra("plan_id",plan?.id ?: 0L).putExtra("generate",plan==null))})
+        body.addView(ui.menuRow("复习与练习","卡片自评、选择题和已有错题记录",org.qingjian.speech.R.drawable.ic_repeat){page="review";render()})
+    }
+
+    private fun openWord(word: VocabularyEntry) {
+        startActivity(Intent(this, WordStudyActivity::class.java).putExtra("word_id", word.id))
     }
 
     private fun vocabulary() {
-        body.addView(ui.title("词汇本"))
-        body.addView(ui.text("保存最近 500 个条目的列表；点词汇补充中文笔记、朗读或提问。", 13f, true))
+        body.addView(ui.caption("你遇到的词，值得慢慢学会。最近 500 个条目可搜索。"))
         body.addView(ui.button("添加词汇或短语") { editWord() })
         val search = ui.input("搜索英文或中文笔记", query)
         body.addView(search)
+        val filters = ui.row()
+        for(label in listOf("全部", "有笔记", "已自评")) filters.addView(ui.button(label) { filter = label; render() }.apply {
+            isSelected = filter == label
+            if(isSelected) background = ui.shape(ui.color(org.qingjian.speech.R.color.chip_background_active), 18)
+        }, LinearLayout.LayoutParams(0, -2, 1f).apply { marginEnd = ui.dp(5) })
+        body.addView(filters)
         val list = ui.column(); body.addView(list)
         fun populate() {
             list.removeAllViews()
-            val matches = store.words(query)
-            if(matches.isEmpty()) list.addView(ui.text("没有找到词汇"))
-            matches.forEach { wordCard(list, it) }
+            val matches = store.words(query).filter { when(filter) { "有笔记" -> it.meaning.isNotBlank(); "已自评" -> it.reviewed > 0; else -> true } }
+            if(matches.isEmpty()) list.addView(ui.text("没有找到词汇", muted = true))
+            matches.forEach { word ->
+                list.addView(ui.wordRow(word.english, word.meaning.ifBlank { "还没有中文笔记" }) { openWord(word) }.apply {
+                    contentDescription = "学习这个词：${word.english}"
+                })
+                ui.divider(list)
+            }
         }
         search.addTextChangedListener(object : TextWatcher {
             override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) = Unit
@@ -110,40 +145,10 @@ class LearningActivity : Activity() {
             override fun afterTextChanged(s: Editable?) = Unit
         })
         populate()
+        body.addView(ui.caption("词汇、中文笔记与已保存讲解，离线也能看。"))
     }
 
-    private fun wordCard(parent: LinearLayout, word: VocabularyEntry) {
-        ui.card(parent) { card ->
-            card.addView(ui.text(word.english, 20f))
-            card.addView(ui.text(word.meaning.ifEmpty { "中文笔记尚未填写" }, muted = true))
-            card.addView(ui.text("收到 ${word.received} 次 · 完整播放 ${word.played} 次 · 自评复习 ${word.reviewed} 次", 12f, true))
-            card.addView(ui.button("朗读") { speak(word.english) })
-            card.addView(ui.button("学习这个词", true) {
-                startActivity(Intent(this, WordStudyActivity::class.java).putExtra("word_id", word.id))
-            })
-            card.addView(ui.button("编辑中文笔记") { editWord(word) })
-        }
-    }
-
-    private fun editWord(word: VocabularyEntry? = null) {
-        val fields = ui.column().apply { setPadding(ui.dp(20), ui.dp(8), ui.dp(20), 0) }
-        val english = ui.input("英文单词或短语", word?.english.orEmpty())
-        english.isEnabled = word == null
-        val meaning = ui.input("中文笔记（可留空）", word?.meaning.orEmpty(), true)
-        fields.addView(english); fields.addView(meaning)
-        val dialog = AlertDialog.Builder(this).setTitle(if(word == null) "添加学习条目" else "编辑中文笔记")
-            .setView(fields).setNegativeButton("取消", null).setPositiveButton("保存", null).create()
-        dialog.setOnShowListener {
-            dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener {
-                val value = english.text.toString().trim()
-                if(value.isEmpty() || value.length > 500) { english.error = "请输入 1～500 字的英文"; return@setOnClickListener }
-                if(meaning.length() > 1000) { meaning.error = "中文笔记请控制在 1000 字以内"; return@setOnClickListener }
-                val id = word?.id ?: store.addWord(value)
-                store.setMeaning(id, meaning.text.toString()); dialog.dismiss(); render()
-            }
-        }
-        dialog.show()
-    }
+    private fun editWord(word: VocabularyEntry? = null) { WordEditor.show(this, word) { render() } }
 
     private fun speak(english: String) {
         startForegroundService(Intent(this, ReceiverService::class.java).setAction("word").putExtra("text", english))

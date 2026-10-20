@@ -1,22 +1,23 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <!-- 方案 2: 原生系统质感 (iOS 18 / Material 3 Clean) 色彩系统 -->
-    <color name="screen_background">#F2F2F7</color>
+    <!-- 青简学习：米白、青绿与浅芽色。 -->
+    <color name="screen_background">#F8FAF7</color>
     <color name="card_background">#FFFFFF</color>
-    <color name="card_stroke">#E5E5EA</color>
-    <color name="divider_color">#E5E5EA</color>
-
-    <color name="system_blue">#007AFF</color>
-    <color name="system_blue_pressed">#0062CC</color>
-    <color name="system_green">#34C759</color>
-    <color name="system_red">#FF3B30</color>
-    <color name="system_red_light">#FFF0F0</color>
-    <color name="system_amber">#FF9500</color>
-
-    <color name="text_primary">#000000</color>
-    <color name="text_secondary">#6E6E73</color>
-    <color name="text_tertiary">#8E8E93</color>
-
-    <color name="chip_background">#E5E5EA</color>
-    <color name="chip_background_active">#E8F2FF</color>
+    <color name="card_stroke">#E1E8DC</color>
+    <color name="divider_color">#E5EADF</color>
+    <color name="system_blue">#225746</color>
+    <color name="system_blue_pressed">#153F32</color>
+    <color name="system_green">#426F46</color>
+    <color name="system_red">#AF493D</color>
+    <color name="system_red_light">#FFF0ED</color>
+    <color name="system_amber">#9A7043</color>
+    <color name="text_primary">#233D34</color>
+    <color name="text_secondary">#687961</color>
+    <color name="text_tertiary">#75836C</color>
+    <color name="chip_background">#EDF2E6</color>
+    <color name="chip_background_active">#E4EDD8</color>
+    <color name="hero_background">#153F32</color>
+    <color name="hero_text">#DEEDB9</color>
+    <color name="hero_secondary">#CEE0C3</color>
+    <color name="warm_background">#F5EDDF</color>
 </resources>

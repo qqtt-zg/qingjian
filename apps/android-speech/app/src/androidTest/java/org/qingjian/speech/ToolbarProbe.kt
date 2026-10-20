@@ -17,7 +17,7 @@ import org.qingjian.speech.update.UpdateActivity
 object ToolbarProbe {
     fun run(test: Instrumentation): String {
         val pages = listOf(SpeechSettingsActivity::class.java, DataSettingsActivity::class.java, SettingsActivity::class.java,
-            UpdateActivity::class.java, TutorActivity::class.java)
+            UpdateActivity::class.java, TutorActivity::class.java, org.qingjian.speech.learning.SettingsHomeActivity::class.java, org.qingjian.speech.learning.PreferencesActivity::class.java)
         for(page in pages) {
             val activity = test.startActivitySync(Intent(test.targetContext, page).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
             test.waitForIdleSync()

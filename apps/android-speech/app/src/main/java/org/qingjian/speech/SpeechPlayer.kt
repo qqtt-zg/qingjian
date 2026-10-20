@@ -30,15 +30,20 @@ class SpeechPlayer(
     @Volatile private var closed = false
     @Volatile private var track: AudioTrack? = null
     private var engine: OfflineTts? = null
+    private var bilingual: OfflineTts? = null
     private var enginePack=""
     private val audio = context.getSystemService(AudioManager::class.java)
     private val attributes = AudioAttributes.Builder().setUsage(AudioAttributes.USAGE_MEDIA).setContentType(AudioAttributes.CONTENT_TYPE_SPEECH).build()
 
     fun isIdle(): Boolean = synchronized(monitor) { !working && pending == null }
 
-    fun submit(text: String, learn: Boolean = false) {
-        require(text.isNotBlank() && text.length <= 500)
-        enqueue(text, learn)
+    var onEvent: ((Long, String) -> Unit)? = null
+
+    private fun event(id: Long, message: String) { report(message); onEvent?.invoke(id, message) }
+
+    fun submit(text: String, learn: Boolean = false): Long {
+        require(text.isNotBlank() && text.length <= 4000)
+        return enqueue(text, learn)
     }
 
     fun configure() { enqueue("") }
@@ -48,8 +53,8 @@ class SpeechPlayer(
         synchronized(monitor) { pending=null }
     }
 
-    private fun enqueue(text:String, learn: Boolean = false) {
-        if(closed) return
+    private fun enqueue(text:String, learn: Boolean = false): Long {
+        if(closed) return -1
         val id = serial.incrementAndGet()
         synchronized(monitor) {
             pending = Triple(id, text, learn)
@@ -58,47 +63,55 @@ class SpeechPlayer(
                 executor.execute { drain() }
             }
         }
+        return id
     }
 
     private fun drain() {
-        while (!closed) {
+        drainLoop@ while (!closed) {
             val next = synchronized(monitor) {
-                val value = pending
-                pending = null
-                if (value == null) working = false
+                val value=pending;pending=null
+                if(value==null)working=false
                 value
             } ?: break
-            var phase="初始化音色"
+            var phase="初始化音色";var usingCustom=false
             val prefs=context.getSharedPreferences("speech",0)
             val pack=prefs.getString("pack","builtin") ?: "builtin"
             val names=VoiceLibrary.names(context,pack)
             val selected=prefs.getInt("voice",0).coerceIn(0,names.lastIndex)
-            val label=names[selected]
+            var label=names[selected]
             val key=if(pack=="builtin") "builtin:${BundledVoice.engineKey(selected)}" else pack
             try {
-                report("正在生成英文语音（$label）…")
-                if (engine == null || enginePack!=key) {
-                    report("正在准备音色（$label），首次加载请稍候…")
-                    engine?.release();engine=null
-                    engine=VoiceLibrary.create(context,pack,selected)
-                    enginePack=key
-                    VoiceLibrary.recordCount(context,pack,engine!!.numSpeakers())
+                val plan=if(next.second.isEmpty())listOf(SpeechSegment("",false)) else SpeechPlan.split(next.second)
+                val parts=mutableListOf<Pair<FloatArray,Int>>()
+                for(segment in plan) {
+                    if(next.first!=serial.get()||closed)continue@drainLoop
+                    val useBilingual=segment.chinese || pack=="builtin"&&selected==1
+                    val selectedEngine:OfflineTts
+                    val voice:Int
+                    if(useBilingual) {
+                        label=if(segment.chinese)ChineseVoices.label(context) else names[selected]
+                        if(bilingual==null){event(next.first,"正在准备中英文音色，首次加载请稍候…");bilingual=BundledVoice.create(context,1)}
+                        selectedEngine=bilingual!!
+                        voice=if(segment.chinese)ChineseVoices.speaker(context) else BundledVoice.speakerId(selected)
+                        usingCustom=false
+                    } else {
+                        label=names[selected];usingCustom=pack!="builtin"
+                        if(engine==null||enginePack!=key){event(next.first,"正在准备音色（$label），首次加载请稍候…");engine?.release();engine=null;engine=VoiceLibrary.create(context,pack,selected);enginePack=key;VoiceLibrary.recordCount(context,pack,engine!!.numSpeakers())}
+                        selectedEngine=engine!!
+                        voice=if(pack=="builtin")BundledVoice.speakerId(selected) else selected
+                    }
+                    if(next.second.isEmpty()){event(next.first,"音色已就绪，可试听或朗读");continue@drainLoop}
+                    phase="合成";event(next.first,"正在生成语音（$label）…")
+                    val generated=selectedEngine.generate(segment.text,voice.coerceIn(0,selectedEngine.numSpeakers()-1),SpeechRate.speed(context))
+                    check(generated.samples.isNotEmpty()&&generated.samples.any {it.isFinite()&&kotlin.math.abs(it)>0.00001f})
+                    parts+=generated.samples to generated.sampleRate
                 }
-                if(next.second.isEmpty()) {report("音色已就绪，可从电脑试听");continue}
-                val voice=(if(pack=="builtin") BundledVoice.speakerId(selected) else selected).coerceIn(0,engine!!.numSpeakers()-1)
-                phase="合成"
-                val generated = engine!!.generate(next.second, voice, SpeechRate.speed(context))
-                check(generated.samples.isNotEmpty() && generated.samples.any { it.isFinite() && kotlin.math.abs(it)>0.00001f })
-                phase="播放"
-                if (next.first == serial.get() && !closed && play(generated.samples, generated.sampleRate, next.first,label) && next.third) {
-                    runCatching { org.qingjian.speech.learning.LearningStore.get(context).record(next.second, completed = true) }
-                }
-            } catch (error: Exception) {
-                if(pack!="builtin") {
-                    engine?.release();engine=null;enginePack=""
-                    prefs.edit().putString("pack","builtin").putInt("voice",0).apply()
-                }
-                if (!closed) report("$label $phase 失败（${error.javaClass.simpleName}）"+if(pack!="builtin") "，已恢复内置音色" else "，可切换音色后重试")
+                if(next.first!=serial.get()||closed)continue
+                val (samples,rate)=SpeechPlan.merge(parts);phase="播放"
+                if(play(samples,rate,next.first,label)&&next.third)runCatching {org.qingjian.speech.learning.LearningStore.get(context).record(next.second,completed=true)}
+            } catch(error:Exception) {
+                if(usingCustom){engine?.release();engine=null;enginePack="";prefs.edit().putString("pack","builtin").putInt("voice",0).apply()}
+                if(!closed&&next.first==serial.get())event(next.first,"$label $phase 失败（${error.javaClass.simpleName}）"+if(usingCustom)"，已恢复内置音色" else "，请检查音色或稍后重试")
             }
         }
         idle()
@@ -108,10 +121,10 @@ class SpeechPlayer(
         val focus = AudioFocusRequest.Builder(AudioManager.AUDIOFOCUS_GAIN_TRANSIENT_MAY_DUCK)
             .setAudioAttributes(attributes).setOnAudioFocusChangeListener({ change ->
                 // 旧播放的延迟回调不能取消已经排入的新请求。
-                if (change < 0 && serial.compareAndSet(id,id+1) && !closed) report("$label 播放被其他音频打断，请重试")
+                if (change < 0 && serial.compareAndSet(id,id+1) && !closed) event(id, "$label 播放被其他音频打断，请重试")
             }, Handler(Looper.getMainLooper())).build()
         if (audio.requestAudioFocus(focus) != AudioManager.AUDIOFOCUS_REQUEST_GRANTED) {
-            report("$label 暂时无法播放：其他音频占用焦点，请稍后再点喇叭")
+            event(id, "$label 暂时无法播放：其他音频占用焦点，请稍后再点喇叭")
             return false
         }
         var output: AudioTrack? = null
@@ -134,7 +147,7 @@ class SpeechPlayer(
             check(offset >= 0)
             if (closed || serial.get() != id) return false
             output.play()
-            report("正在朗读（$label）；结束后恢复其他声音")
+            event(id, "正在朗读（$label）；结束后恢复其他声音")
             while (!closed && serial.get() == id && offset < pcm.size) {
                 val count = output.write(pcm, offset, minOf(1024,pcm.size-offset), AudioTrack.WRITE_BLOCKING)
                 check(count > 0)
@@ -143,7 +156,7 @@ class SpeechPlayer(
             val deadline = System.nanoTime() + ((pcm.size.toDouble()/rate + 5) * 1e9).toLong()
             while (!closed && serial.get() == id && output.playbackHeadPosition < offset && System.nanoTime() < deadline) Thread.sleep(20)
             if (!closed && serial.get() == id) {
-                report(if (output.playbackHeadPosition >= offset) "$label 朗读完成，等待电脑点击"
+                event(id, if (output.playbackHeadPosition >= offset) "$label 朗读完成，等待电脑点击"
                     else "$label 播放超时，音频未完整输出，请重试")
             }
             return !closed && serial.get() == id && output.playbackHeadPosition >= offset
@@ -158,7 +171,7 @@ class SpeechPlayer(
         closed = true
         serial.incrementAndGet()
         synchronized(monitor) { pending = null }
-        executor.execute { engine?.release(); engine = null }
+        executor.execute { engine?.release(); engine = null; bilingual?.release();bilingual=null }
         executor.shutdown()
     }
 }

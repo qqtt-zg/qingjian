@@ -10,6 +10,14 @@ import com.google.zxing.qrcode.QRCodeReader
 import org.json.JSONObject
 
 class SmokeInstrumentation : Instrumentation() {
+    private var archiveAnalysis=false
+    private var retryDeadline=false
+    private var learningV2=false
+    private var assessment=false
+    private var assessmentLive=false
+    private var workspace=false
+    private var bilingual=false
+    private var notes=false
     private var probe=false
     private var playback=false
     private var network: String?=null
@@ -30,11 +38,51 @@ class SmokeInstrumentation : Instrumentation() {
     private var quiz=false
     private var oral=false
     private var transfer=false
+    private var autoConnect = false
+    private var memory = false
+    private var koog = false
+    private var autonomy = false
+    private var cancelUi = false
+    private var nativeLayout = false
+    private var dailyForms = false
+    private var dailyUi = false
+    private var dailyFlow = false
+    private var followup = false
+    private var conversations = false
+    private var tools = false
+    private var toolUi = false
+    private var connectionUi = false
+    private var recovery = false
+    private var redesign = false
     private var downloadUi=false
-    override fun onCreate(arguments: Bundle?) { super.onCreate(arguments); downloadUi=arguments?.getString("download_ui")=="true"; transfer=arguments?.getString("transfer")=="true"; migration=arguments?.getString("migration")=="true"; practice=arguments?.getString("practice")=="true"; quiz=arguments?.getString("quiz")=="true"; oral=arguments?.getString("oral")=="true"; study=arguments?.getString("study")=="true"; aiConnection=arguments?.getString("ai_connection")=="true"; rate=arguments?.getString("rate")=="true"; toolbar=arguments?.getString("toolbar")=="true"; settings=arguments?.getString("settings")=="true"; updates=arguments?.getString("updates")=="true"; learning=arguments?.getString("learning")=="true"; shortAudio=arguments?.getString("short_audio")=="true"; heart=arguments?.getString("heart")=="true"; probe=arguments?.getString("voices")=="true"; words=arguments?.getString("words")=="true"; playback=arguments?.getString("playback")=="true"; network=arguments?.getString("network"); controlUrl=arguments?.getString("control");controlPack=arguments?.getString("pack") ?: ""; start() }
+    override fun onCreate(arguments: Bundle?) { super.onCreate(arguments); archiveAnalysis=arguments?.getString("archive_analysis")=="true"; retryDeadline=arguments?.getString("retry_deadline")=="true"; learningV2=arguments?.getString("learning_v2")=="true"; assessmentLive=arguments?.getString("assessment_live")=="true"; workspace=arguments?.getString("workspace")=="true"; bilingual=arguments?.getString("bilingual")=="true"; assessment=arguments?.getString("assessment")=="true"; notes=arguments?.getString("notes")=="true"; dailyForms=arguments?.getString("daily_forms")=="true"; dailyUi=arguments?.getString("daily_ui")=="true"; dailyFlow=arguments?.getString("daily_flow")=="true"; followup=arguments?.getString("followup")=="true"; cancelUi=arguments?.getString("cancel_ui")=="true"; nativeLayout=arguments?.getString("native_layout")=="true"; autonomy=arguments?.getString("autonomy")=="true"; koog=arguments?.getString("koog")=="true"; memory=arguments?.getString("memory")=="true"; conversations=arguments?.getString("conversations")=="true"; autoConnect=arguments?.getString("auto_connect")=="true"; tools=arguments?.getString("tools")=="true"; toolUi=arguments?.getString("tool_ui")=="true"; connectionUi=arguments?.getString("connection_ui")=="true"; recovery=arguments?.getString("network_recovery")=="true"; redesign=arguments?.getString("redesign")=="true"; downloadUi=arguments?.getString("download_ui")=="true"; transfer=arguments?.getString("transfer")=="true"; migration=arguments?.getString("migration")=="true"; practice=arguments?.getString("practice")=="true"; quiz=arguments?.getString("quiz")=="true"; oral=arguments?.getString("oral")=="true"; study=arguments?.getString("study")=="true"; aiConnection=arguments?.getString("ai_connection")=="true"; rate=arguments?.getString("rate")=="true"; toolbar=arguments?.getString("toolbar")=="true"; settings=arguments?.getString("settings")=="true"; updates=arguments?.getString("updates")=="true"; learning=arguments?.getString("learning")=="true"; shortAudio=arguments?.getString("short_audio")=="true"; heart=arguments?.getString("heart")=="true"; probe=arguments?.getString("voices")=="true"; words=arguments?.getString("words")=="true"; playback=arguments?.getString("playback")=="true"; network=arguments?.getString("network"); controlUrl=arguments?.getString("control");controlPack=arguments?.getString("pack") ?: ""; start() }
     override fun onStart() {
         val result = Bundle()
         try {
+            if(archiveAnalysis){result.putString("stream",ArchiveAnalysisProbe.run(this));finish(-1,result);return}
+            if(retryDeadline){result.putString("stream",RetryDeadlineProbe.run(this));finish(-1,result);return}
+            if(learningV2){result.putString("stream",LearningV2Probe.run(this));finish(-1,result);return}
+            if(assessmentLive){result.putString("stream",AssessmentLiveProbe.run(this));finish(-1,result);return}
+            if(workspace){result.putString("stream",WorkspaceProbe.run(this));finish(-1,result);return}
+            if(bilingual){result.putString("stream",BilingualProbe.run(this));finish(-1,result);return}
+            if(assessment){result.putString("stream",AssessmentProtocolProbe.run(targetContext)+"\n"+AssessmentStoreProbe.run(targetContext)+"\n"+AssessmentSettingsProbe.run(this));finish(-1,result);return}
+            if(notes) {result.putString("stream",NotesProbe.run(this));finish(-1,result);return}
+            if(dailyForms) {result.putString("stream",DailyFormProbe.run(this));finish(-1,result);return}
+            if(dailyUi) {result.putString("stream",DailyUiProbe.run(this));finish(-1,result);return}
+            if(dailyFlow) {result.putString("stream",DailyProbe.run(this));finish(-1,result);return}
+            if(followup) {result.putString("stream",FollowupProbe.run(this));finish(-1,result);return}
+            if(cancelUi) {result.putString("stream",CancelUiProbe.run(this));finish(-1,result);return}
+            if(nativeLayout) {result.putString("stream",NativeLayoutProbe.run(this));finish(-1,result);return}
+            if(autonomy) {result.putString("stream",AutonomyProbe.run(this));finish(-1,result);return}
+            if(koog) {result.putString("stream",KoogProbe.run(this));finish(-1,result);return}
+            if(memory) {result.putString("stream",MemoryProbe.run(this) + "\n" + SessionMemoryProbe.run(this));finish(-1,result);return}
+            if(conversations) {result.putString("stream",ConversationProbe.run(this));finish(-1,result);return}
+            if(autoConnect) {result.putString("stream",AutoConnectProbe.run(this));finish(-1,result);return}
+            if(tools) {result.putString("stream",ToolsProbe.run(this));finish(-1,result);return}
+            if(toolUi) {result.putString("stream",ToolUiProbe.run(this));finish(-1,result);return}
+            if(connectionUi) {result.putString("stream",ConnectionUiProbe.run(this));finish(-1,result);return}
+            if(recovery) {result.putString("stream",RecoveryProbe.run(this));finish(-1,result);return}
+            if(redesign) {result.putString("stream",RedesignProbe.run(this));finish(-1,result);return}
             if(downloadUi) {result.putString("stream",DownloadUiProbe.run(this));finish(-1,result);return}
             if(transfer) {result.putString("stream",TransferProbe.run(this));finish(-1,result);return}
             if(migration) {result.putString("stream",MigrationProbe.run(this));finish(-1,result);return}
@@ -121,6 +169,9 @@ class SmokeInstrumentation : Instrumentation() {
             targetContext.stopService(android.content.Intent(targetContext,ReceiverService::class.java))
             result.putString("stream","PASS offline synthesis, voice selection persistence, quiet PCM gain/bounds, QR decode/pairing, foreground audio playback and cleanup")
             finish(-1,result)
-        } catch (error: Throwable) { result.putString("stream","FAIL: ${error.javaClass.simpleName}: ${error.message}"); finish(0,result) }
+        } catch (error: Throwable) {
+            result.putString("stream","FAIL: ${error.javaClass.simpleName}: ${error.message}\n" + error.stackTrace.take(6).joinToString("\n"))
+            finish(0,result)
+        }
     }
 }

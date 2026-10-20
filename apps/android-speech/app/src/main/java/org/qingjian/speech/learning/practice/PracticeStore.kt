@@ -26,7 +26,7 @@ class PracticeStore(context: Context) {
 
     fun submit(question: Question, text: String): Attempt {
         require(text.isNotBlank() && text.length <= 1000)
-        if(question.kind == Kind.CHOICE) require(text in question.options)
+        if(question.kind != Kind.SPELLING) require(text in question.options)
         val db = store.writableDatabase
         db.beginTransaction()
         try {
@@ -51,8 +51,9 @@ class PracticeStore(context: Context) {
         buildList { while(c.moveToNext()) add(attempt(c)) }
     }
 
-    fun saveRecording(wordId: Long, english: String, source: File, duration: Long): Long {
+    fun saveRecording(wordId: Long, english: String, source: File, duration: Long, reference: String=english, mode: String="word"): Long {
         require(duration in 500..30000)
+        org.qingjian.speech.learning.assessment.Protocol.validate(reference,mode)
         val db = store.writableDatabase
         var saved: File? = null
         db.beginTransaction()
@@ -63,6 +64,7 @@ class PracticeStore(context: Context) {
             val id = db.insertOrThrow("oral_recordings", null, ContentValues().apply {
                 put("word_id", wordId); put("english", english); put("filename", destination.name); put("duration", duration)
                 put("rating", "unreviewed"); put("created", System.currentTimeMillis())
+                put("reference_text",reference);put("target_mode",mode)
             })
             db.setTransactionSuccessful()
             return id
@@ -71,8 +73,8 @@ class PracticeStore(context: Context) {
     }
 
     fun recordings(wordId: Long): List<Recording> = store.readableDatabase.rawQuery(
-        "SELECT id, word_id, english, filename, duration, rating FROM oral_recordings WHERE word_id=? ORDER BY id DESC LIMIT 20", arrayOf(wordId.toString())).use { c ->
-        buildList { while(c.moveToNext()) add(Recording(c.getLong(0), c.getLong(1), c.getString(2), c.getString(3), c.getLong(4), c.getString(5))) }
+        "SELECT id, word_id, english, filename, duration, rating,reference_text,target_mode FROM oral_recordings WHERE word_id=? ORDER BY id DESC LIMIT 20", arrayOf(wordId.toString())).use { c ->
+        buildList { while(c.moveToNext()) add(Recording(c.getLong(0), c.getLong(1), c.getString(2), c.getString(3), c.getLong(4), c.getString(5),c.getString(6).ifBlank {c.getString(2)},c.getString(7))) }
     }
 
     fun rateRecording(id: Long, rating: String) {
@@ -89,7 +91,7 @@ class PracticeStore(context: Context) {
         fun createTables(db: SQLiteDatabase) {
             db.execSQL("CREATE TABLE quiz_attempts (id INTEGER PRIMARY KEY AUTOINCREMENT, question_key TEXT NOT NULL UNIQUE, word_id INTEGER NOT NULL, english TEXT NOT NULL, meaning TEXT NOT NULL, kind TEXT NOT NULL, answer TEXT NOT NULL, correct INTEGER NOT NULL, created INTEGER NOT NULL)")
             db.execSQL("CREATE INDEX quiz_word_kind ON quiz_attempts(word_id,kind,id)")
-            db.execSQL("CREATE TABLE oral_recordings (id INTEGER PRIMARY KEY AUTOINCREMENT, word_id INTEGER NOT NULL, english TEXT NOT NULL, filename TEXT NOT NULL UNIQUE, duration INTEGER NOT NULL, rating TEXT NOT NULL, created INTEGER NOT NULL)")
+            db.execSQL("CREATE TABLE oral_recordings (id INTEGER PRIMARY KEY AUTOINCREMENT, word_id INTEGER NOT NULL, english TEXT NOT NULL, filename TEXT NOT NULL UNIQUE, duration INTEGER NOT NULL, rating TEXT NOT NULL, created INTEGER NOT NULL,reference_text TEXT NOT NULL DEFAULT '',target_mode TEXT NOT NULL DEFAULT 'word')")
         }
     }
 }

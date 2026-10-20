@@ -1,8 +1,17 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
+    <item name="mainHeader" type="id" />
+    <item name="mainTitle" type="id" />
+    <item name="appSettings" type="id" />
+    <item name="dailyPrimary" type="id" />
     <item name="pageToolbar" type="id" />
     <item name="sbRate" type="id" />
     <item name="tvRateAmount" type="id" />
     <item name="btnRateNormal" type="id" />
     <item name="btnRate125" type="id" />
+    <item name="connectionBar" type="id" />
+    <item name="connectionSummary" type="id" />
+    <item name="scanConnect" type="id" />
+    <item name="reconnectConnect" type="id" />
+    <item name="stopConnect" type="id" />
 </resources>

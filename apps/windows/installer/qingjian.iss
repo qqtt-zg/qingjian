@@ -80,11 +80,13 @@ Source: "{#Repo}\target\installer\settings-runtime\*"; DestDir: "{app}"; Flags: 
 Source: "{#Repo}\apps\windows\tsf\resources\qingjian.ico"; DestDir: "{app}"; Flags: ignoreversion
 ; —— 个人版手机朗读：只带运行文件，不带配对凭证、配置、缓存或测试数据 ——
 Source: "{#Repo}\tools\speech-relay\server.py"; DestDir: "{app}\tools\speech-relay"; Flags: ignoreversion
+Source: "{#Repo}\tools\speech-relay\learning_sync.py"; DestDir: "{app}\tools\speech-relay"; Flags: ignoreversion
 Source: "{#Repo}\tools\speech-relay\desktop.py"; DestDir: "{app}\tools\speech-relay"; Flags: ignoreversion
 Source: "{#Repo}\tools\speech-relay\speech_control.py"; DestDir: "{app}\tools\speech-relay"; Flags: ignoreversion
 Source: "{#Repo}\tools\speech-relay\voice_packs.py"; DestDir: "{app}\tools\speech-relay"; Flags: ignoreversion
 Source: "{#Repo}\tools\speech-relay\app_updates.py"; DestDir: "{app}\tools\speech-relay"; Flags: ignoreversion
 Source: "{#Repo}\tools\speech-relay\update_http.py"; DestDir: "{app}\tools\speech-relay"; Flags: ignoreversion
+Source: "{#Repo}\tools\speech-relay\notes\*.py"; DestDir: "{app}\tools\speech-relay\notes"; Flags: ignoreversion
 Source: "{#Repo}\tools\speech-relay\pairing.py"; DestDir: "{app}\tools\speech-relay"; Flags: ignoreversion
 Source: "{#Repo}\tools\speech-relay\tailscale_link.py"; DestDir: "{app}\tools\speech-relay"; Flags: ignoreversion
 Source: "{#Repo}\tools\speech-relay\tunnel.py"; DestDir: "{app}\tools\speech-relay"; Flags: ignoreversion

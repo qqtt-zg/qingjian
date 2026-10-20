@@ -38,7 +38,10 @@ object DownloadUiProbe {
                         return match.groupValues[1].toLong() to match.groupValues[2].toLong()
                     }
                     override fun connect() = Unit
-                    override fun disconnect() { gate.countDown() }
+                    override fun disconnect() {
+                        // 查询版本完成不能放行下载；只有断开安装包请求才解除慢速响应。
+                        if (url.path != "/api/update") gate.countDown()
+                    }
                     override fun usingProxy() = false
                     override fun getResponseCode(): Int {
                         check(getRequestProperty("Authorization") == "Bearer " + "a".repeat(32))

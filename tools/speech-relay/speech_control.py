@@ -14,7 +14,7 @@ class SpeechControl:
         self.path = Path(root) / "control.json"
         self.packs = packs
         self.lock = threading.RLock()
-        self.value = {"revision": 0, "enabled": True, "pack": "builtin", "speaker": 0}
+        self.value = {"revision": 0, "enabled": True, "pack": "builtin", "speaker": 0, "allow_notes": False}
         self.device = {}
         self.last_seen = 0.0
         if self.path.is_file():
@@ -33,6 +33,10 @@ class SpeechControl:
             raise ValueError("控制设置格式无效")
         with self.lock:
             updated = dict(self.value)
+            if "allow_notes" in data:
+                if type(data["allow_notes"]) is not bool:
+                    raise ValueError("笔记工作流开关无效")
+                updated["allow_notes"] = data["allow_notes"]
             if "enabled" in data:
                 if type(data["enabled"]) is not bool:
                     raise ValueError("朗读开关无效")

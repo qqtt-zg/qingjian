@@ -110,6 +110,20 @@ def start():
     raise RuntimeError("建立手机连接超时，请稍后刷新状态")
 
 
+def start_notes():
+    start()
+    if "allow_notes" not in request("/api/admin")["control"]:
+        request("/api/admin/stop", {})
+        for _ in range(20):
+            time.sleep(.5)
+            if not snapshot()["running"]:
+                break
+        else:
+            raise RuntimeError("旧连接工具尚未退出，请关闭后重试")
+        start()
+    request("/api/admin/control", {"allow_notes": True})
+
+
 def output(data):
     for key, value in data.items():
         if key != "choices":
@@ -122,17 +136,23 @@ def output(data):
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("action", choices=("status", "start", "stop", "enable", "pause", "select", "preview", "import"))
+    parser.add_argument("action", choices=("status", "start", "start-notes", "stop", "enable", "pause", "select", "preview", "import", "notes-enable", "notes-disable"))
     parser.add_argument("value", nargs="?")
     args = parser.parse_args()
     try:
         if args.action == "start":
             start()
+        elif args.action == "start-notes":
+            start_notes()
         elif args.action == "stop":
             request("/api/admin/stop", {})
             time.sleep(1)
         elif args.action in ("enable", "pause"):
             request("/api/admin/control", {"enabled": args.action == "enable"})
+        elif args.action in ("notes-enable", "notes-disable"):
+            request("/api/admin/control", {"allow_notes": args.action == "notes-enable"})
+            if args.action == "notes-enable" and not request("/api/admin")["control"].get("allow_notes", False):
+                raise RuntimeError("旧连接工具不支持笔记，请使用 start-notes 启动新版")
         elif args.action == "select":
             pack, _, speaker = (args.value or "").rpartition(":")
             request("/api/admin/control", {"pack": pack, "speaker": int(speaker)})
