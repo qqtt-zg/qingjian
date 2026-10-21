@@ -8,5 +8,7 @@
 /logs
 /data
 .playwright-mcp/
+.playwright-cli/
+.workbuddy-ai/
 __pycache__/
 /tools/speech-relay/__pycache__/
