@@ -86,6 +86,13 @@ class SpeechHandler(BaseHTTPRequestHandler):
     server_version = "QingjianSpeech/1"
     sys_version = ""
 
+    # 已读掉的请求体字节数；回复前要把剩下的读干净（见 drain_body）。
+    _body_read = 0
+
+    def handle_one_request(self):
+        self._body_read = 0
+        super().handle_one_request()
+
     def setup(self):
         super().setup()
         self.connection.settimeout(20)
@@ -95,6 +102,7 @@ class SpeechHandler(BaseHTTPRequestHandler):
         pass
 
     def reply(self, status, data, content_type="application/json; charset=utf-8"):
+        self.drain_body()
         body = data if isinstance(data, bytes) else json.dumps(data, ensure_ascii=False).encode("utf-8")
         try:
             self.send_response(status)
@@ -245,11 +253,45 @@ class SpeechHandler(BaseHTTPRequestHandler):
             return False
         return self.authenticated(publish=True)
 
+    def read_body(self, length):
+        """读请求体并记下已读字节，回复前好把剩下的丢掉。"""
+        data = self.rfile.read(length)
+        self._body_read += length
+        return data
+
+    def drain_body(self):
+        """把没读干净的请求体丢掉。
+
+        错误回复时往往还没读请求体。带着没读完的请求体关连接，Windows 会发 RST
+        而不是 FIN，客户端常常只看到「连接被中止」，拿不到本该收到的状态码与提示，
+        手机端于是显示笼统的「同步失败」。读干净再关，响应才回得去。
+        """
+        remaining = self._body_length() - self._body_read
+        if remaining <= 0 or remaining > 1024 * 1024:
+            return
+        try:
+            self.connection.settimeout(5.0)     # 丢弃请求体不该久等
+            self.rfile.read(remaining)
+        except (OSError, ValueError, TimeoutError):
+            return
+        finally:
+            try:
+                self.connection.settimeout(None)
+            except OSError:
+                pass
+        self._body_read += remaining
+
+    def _body_length(self):
+        try:
+            return int(self.headers.get("Content-Length", "0"))
+        except (AttributeError, ValueError):
+            return 0
+
     def json_body(self):
         length = int(self.headers.get("Content-Length", "0"))
         if self.headers.get_content_type() != "application/json" or not 1 <= length <= 32768:
             raise ValueError("管理请求格式或长度无效")
-        return json.loads(self.rfile.read(length).decode("utf-8"))
+        return json.loads(self.read_body(length).decode("utf-8"))
 
     def do_POST(self):
         path = urlsplit(self.path).path
@@ -262,7 +304,7 @@ class SpeechHandler(BaseHTTPRequestHandler):
                 if not self.server.state.learning:
                     self.reply(503, {"error": "请更新电脑连接工具"})
                     return
-                data = json.loads(self.rfile.read(length).decode("utf-8"))
+                data = json.loads(self.read_body(length).decode("utf-8"))
                 self.reply(200, self.server.state.learning.backup(data))
             except (OSError, ValueError, UnicodeDecodeError):
                 self.reply(400, {"error": "学习备份未保存，请检查格式和电脑空间"})
@@ -282,15 +324,23 @@ class SpeechHandler(BaseHTTPRequestHandler):
                 control = self.server.state.control
                 if not control:
                     raise ValueError("管理功能未初始化")
+                stopping = False
                 if path == "/api/device":
                     control.acknowledge(self.json_body())
                 elif path == "/api/admin/stop":
-                    self.server.state.stopping.set()
+                    stopping = True
                 else:
                     control.change(self.json_body())
                     with self.server.state.condition:
                         self.server.state.condition.notify_all()
-                self.reply(200, {"ok": True})
+                try:
+                    self.reply(200, {"ok": True})
+                finally:
+                    # 停止标志放在响应写完之后再置。标志一置，主线程就关服务器；服务端的
+                    # 工作线程是守护线程，进程一退它就被杀掉，200 还没送到对端连接就被关掉，
+                    # 对端看到的是连接重置而不是成功。
+                    if stopping:
+                        self.server.state.stopping.set()
             except (ValueError, OSError, UnicodeDecodeError):
                 self.reply(400, {"error": "请求设置无效，请检查手机版本或音色文件"})
             return
@@ -311,7 +361,7 @@ class SpeechHandler(BaseHTTPRequestHandler):
             length = int(self.headers.get("Content-Length", "0"))
             if not 1 <= length <= 8192:
                 raise ValueError
-            text = self.rfile.read(length).decode("utf-8")
+            text = self.read_body(length).decode("utf-8")
             if not text.strip() or len(text) > 500:
                 raise ValueError
         except (ValueError, UnicodeDecodeError, TimeoutError, ConnectionError):

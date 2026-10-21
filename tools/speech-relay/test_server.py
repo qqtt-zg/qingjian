@@ -3,7 +3,9 @@
 import http.client
 import json
 import secrets
+import socket
 import threading
+import time
 import unittest
 from types import SimpleNamespace
 from unittest.mock import Mock, patch
@@ -58,6 +60,31 @@ class SpeechServerTests(unittest.TestCase):
     def test_other_devices_cannot_publish_even_with_pairing_token(self):
         with patch("server.ipaddress.ip_address", return_value=SimpleNamespace(is_loopback=False)):
             self.assertEqual(self.request("POST", "/api/speech", "hello", self.publish_token)[0], 403)
+        self.assertEqual(self.state.sequence, 0)
+
+    def test_error_reply_reads_the_request_body_first(self):
+        # 错误回复前必须把请求体读干净。带着没读完的请求体关连接，Windows 发 RST 而不是
+        # FIN，客户端只看到「连接被中止」，拿不到本该收到的状态码与提示。手机端于是把
+        # 「配对地址无效」显示成笼统的「同步失败」。
+        # 请求头与请求体分两次发：服务端先只读到请求头，回复的时候请求体还留在内核缓冲里。
+        sock = socket.create_connection(self.server.server_address, timeout=5)
+        try:
+            sock.sendall(
+                b"POST /api/speech HTTP/1.1\r\nHost: 127.0.0.1\r\nContent-Type: text/plain\r\n"
+                b"Content-Length: 5\r\n\r\n")
+            time.sleep(0.02)
+            sock.sendall(b"hello")
+            sock.settimeout(3)
+            data = b""
+            while True:
+                chunk = sock.recv(65536)
+                if not chunk:
+                    break
+                data += chunk
+        finally:
+            sock.close()
+        self.assertIn(b"401", data.split(b"\r\n")[0])
+        self.assertIn("配对地址无效", data.decode("utf-8", "replace"))
         self.assertEqual(self.state.sequence, 0)
 
     def test_phone_cannot_publish_through_a_loopback_proxy(self):
