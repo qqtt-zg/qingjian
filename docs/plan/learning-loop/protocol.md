@@ -14,6 +14,9 @@
   "days": 30,
   "apps_status": "not_collected",
   "truncated": false,
+  "total": 2,
+  "available": true,
+  "invalid_date_rows": 0,
   "words": [
     {
       "language": "en",
@@ -28,9 +31,15 @@
       "example": "把这个版本部署到测试环境",
       "apps": null
     }
+  ],
+  "glosses": [
+    {"language": "en", "word": "扭矩", "pos": "n.", "text": "torque", "reading": null}
   ]
 }
 ```
+
+- `total` 是窗口内词的总数，`truncated` 为真时说明只返回了一部分。`available` 区分「电脑没有生词本」与「生词本是空的」；`invalid_date_rows` 是日期异常被跳过的行数，手机要在状态里说出来——静默丢掉的话，用户只看到「0 词」却不知道原因。
+- `glosses` 是个人释义表原样（见「桌面与手机互相更新」），手机拿本地随包表比对后再合并。
 
 **术语约定（全文通用）**：三个「来源」不是一件事，字段名不共用——
 `origin_text` = 词的中文来源（字符串，来自词汇本第 9 列）；

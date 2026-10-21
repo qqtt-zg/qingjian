@@ -7,6 +7,7 @@ import threading
 import unittest
 import urllib.request
 import urllib.error
+from unittest.mock import patch
 
 from learning_sync import LearningSync
 from server import SpeechServer, SpeechState
@@ -60,6 +61,109 @@ class LearningSyncTest(unittest.TestCase):
 
     def test_missing_vocabulary_is_explicit(self):
         self.assertEqual(self.sync.words(), {"words": [], "available": False, "invalid_date_rows": 0})
+
+    def _write_vocabulary(self, rows):
+        self.sync.vocabulary.write_text(
+            "# 语言\t译词\t看到轮次\t上屏次数\t用过次数\t首见\t末见\t认识\t中文\t例句\n" + rows,
+            encoding="utf-8")
+
+    def test_context_shape_window_and_order(self):
+        today = datetime.date.today()
+        recent = (today - datetime.timedelta(days=3)).isoformat()
+        old = (today - datetime.timedelta(days=60)).isoformat()
+        self._write_vocabulary(
+            f"en\tdeploy\t42\t11\t3\t{old}\t{recent}\t0\t部署到测试环境\t把这个版本部署到测试环境\n"
+            f"en\toldword\t5\t1\t0\t{old}\t{old}\t0\t老词\t老句子\n"
+            f"en\tcandidate\t12\t4\t1\t{old}\t{recent}\t1\t候选词\t这个词是候选词\n")
+        context = self.sync.context()
+        self.assertEqual(context["schema"], 1)
+        self.assertEqual(context["days"], 30)
+        self.assertEqual(context["apps_status"], "not_collected")
+        self.assertFalse(context["truncated"])
+        self.assertTrue(context["available"])
+        self.assertEqual(context["total"], 2)
+        # 30 天没碰的词不在窗口里：这不是「词被删除」，只是窗口外
+        self.assertEqual([w["english"] for w in context["words"]], ["deploy", "candidate"])
+        word = context["words"][0]
+        self.assertEqual(word["language"], "en")
+        self.assertEqual(word["seen"], 42)
+        self.assertEqual(word["committed"], 11)
+        self.assertEqual(word["used"], 3)
+        self.assertEqual(word["first"], old)
+        self.assertEqual(word["last"], recent)
+        self.assertFalse(word["desktop_known"])
+        self.assertEqual(word["origin_text"], "部署到测试环境")
+        self.assertEqual(word["example"], "把这个版本部署到测试环境")
+        self.assertIsNone(word["apps"])
+        self.assertTrue(context["generated_at"].endswith("+08:00") or "+" in context["generated_at"][-6:])
+
+    def test_context_orders_by_committed_then_language_and_word(self):
+        today = datetime.date.today()
+        recent = (today - datetime.timedelta(days=1)).isoformat()
+        self._write_vocabulary(
+            f"en\tbeta\t1\t1\t0\t{recent}\t{recent}\t0\t乙\t乙句\n"
+            f"en\talpha\t1\t1\t0\t{recent}\t{recent}\t0\t甲\t甲句\n"
+            f"en\tgamma\t1\t9\t0\t{recent}\t{recent}\t0\t丙\t丙句\n")
+        words = self.sync.context()["words"]
+        self.assertEqual([w["english"] for w in words], ["gamma", "alpha", "beta"])
+
+    def test_context_truncates_to_the_byte_limit(self):
+        today = datetime.date.today()
+        recent = (today - datetime.timedelta(days=1)).isoformat()
+        self._write_vocabulary(
+            "".join(f"en\tword{index}\t1\t{index}\t0\t{recent}\t{recent}\t0\t中文{index}\t句子{index}\n"
+                    for index in range(50)))
+        with patch("learning_sync.CONTEXT_MAX_BYTES", 1200):
+            context = self.sync.context()
+        self.assertTrue(context["truncated"])
+        self.assertEqual(context["total"], 50)
+        self.assertLess(len(context["words"]), 50)
+        # 截断按上屏次数降序，留下的总是更相关的
+        committed = [w["committed"] for w in context["words"]]
+        self.assertEqual(committed, sorted(committed, reverse=True))
+        body = json.dumps(context, ensure_ascii=False).encode("utf-8")
+        self.assertLessEqual(len(body), 1200)
+
+    def test_context_sends_the_personal_glossary_verbatim(self):
+        today = datetime.date.today()
+        recent = (today - datetime.timedelta(days=1)).isoformat()
+        self._write_vocabulary(f"en\tdeploy\t1\t1\t0\t{recent}\t{recent}\t0\t部署\t部署句子\n")
+        (self.root / "user-glossary-en.tsv").write_text(
+            "# 词\t[词性. ]译词\n扭矩\tn. torque\n棘手\tadj. thorny\n", encoding="utf-8")
+        context = self.sync.context()
+        self.assertEqual(context["glosses"], [
+            {"language": "en", "word": "扭矩", "pos": "n.", "text": "torque", "reading": None},
+            {"language": "en", "word": "棘手", "pos": "adj.", "text": "thorny", "reading": None},
+        ])
+
+    def test_context_without_a_vocabulary_is_explicit(self):
+        context = self.sync.context()
+        self.assertFalse(context["available"])
+        self.assertEqual(context["words"], [])
+        self.assertEqual(context["glosses"], [])
+        self.assertFalse(context["truncated"])
+
+    def test_context_route_requires_pairing(self):
+        state = SpeechState("receive-token", [])
+        state.learning = self.sync
+        server = SpeechServer(("127.0.0.1", 0), state)
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
+        base = "http://127.0.0.1:" + str(server.server_port)
+        try:
+            with self.assertRaises(urllib.error.HTTPError) as error:
+                opener.open(base + "/api/learning/context")
+            self.assertEqual(error.exception.code, 401)
+            request = urllib.request.Request(base + "/api/learning/context",
+                                            headers={"Authorization": "Bearer receive-token"})
+            body = json.load(opener.open(request))
+            self.assertEqual(body["schema"], 1)
+            self.assertIn("words", body)
+        finally:
+            server.shutdown()
+            server.server_close()
+            thread.join(timeout=2)
 
     def test_readable_latest_and_previous_backup(self):
         first = {"schema": 1, "created": 1, "tables": {"learning_events": [{"word": "control"}]}}

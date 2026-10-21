@@ -146,6 +146,16 @@ class SpeechHandler(BaseHTTPRequestHandler):
             except (OSError, ValueError):
                 self.reply(503, {"error": "电脑生词来源暂不可用"})
             return
+        if request.path == "/api/learning/context":
+            if not self.authenticated(): return
+            try:
+                if not self.server.state.learning:
+                    self.reply(503, {"error": "学习同步未启用"})
+                else:
+                    self.reply(200, self.server.state.learning.context())
+            except (OSError, ValueError):
+                self.reply(503, {"error": "电脑生词来源暂不可用"})
+            return
         if request.path.startswith("/api/notes/"):
             if not self.notes_allowed(): return
             try:
