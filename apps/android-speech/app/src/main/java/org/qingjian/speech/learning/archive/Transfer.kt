@@ -38,7 +38,9 @@ object Transfer {
                         val row=rows.getJSONObject(i);val english=row.getString("english");require(english.length in 1..500)
                         val existed=db.rawQuery("SELECT 1 FROM words WHERE lookup=?",arrayOf(english.trim().replace(Regex("\\s+")," ").lowercase(java.util.Locale.ROOT))).use {it.moveToFirst()}
                         val id=book.addWord(english);val word=checkNotNull(book.word(id));if(word.meaning.isBlank()&&row.optString("meaning").length<=1000)book.setMeaning(id,row.optString("meaning"))
-                        if(!existed){val seen=row.optLong("last");val time=if(seen in 1..System.currentTimeMillis()/1000)seen*1000 else 1L;db.execSQL("UPDATE words SET last_seen=? WHERE id=?",arrayOf<Any>(time,id))}
+                        // 桌面的末见是 UTC 午夜的 Unix 秒数（旧的 last 字段按秒数解释）。拿不到就记 0 表示未知：
+                        // 写 1 会在「今日接触」这类筛选里变成 1970，写当前时间则是假的上屏时间。
+                        if(!existed){val seen=row.optLong("last");val time=if(seen in 1..System.currentTimeMillis()/1000)seen*1000 else 0L;db.execSQL("UPDATE words SET last_seen=? WHERE id=?",arrayOf<Any>(time,id))}
                         db.insertWithOnConflict("desktop_sources",null,ContentValues().apply {put("word_id",id);put("payload",row.toString())},SQLiteDatabase.CONFLICT_REPLACE)
                     };db.setTransactionSuccessful()
                 }finally{db.endTransaction()}
@@ -50,7 +52,9 @@ object Transfer {
                     require(epoch==org.qingjian.speech.learning.daily.PlanStore(app).epoch()){"学习数据已清空，忽略旧备份回执"}
                     prefs.edit().putString("backup_hash",digest).putString("backup_time",java.text.DateFormat.getDateTimeInstance().format(java.util.Date())).apply()
                 }
-                if(generation.get()==run)prefs.edit().putString("transfer_status",if(response.optBoolean("available"))"同步完成 · 电脑来源 ${rows.length()} 词；手机成绩独立保存" else "学习档案已检查备份；电脑尚未找到生词本文件").apply()
+                // 电脑生词本里日期异常被跳过的词要说出来：静默丢掉的话，用户只看到「0 词」却不知道原因。
+                val skipped=response.optInt("invalid_date_rows",0)
+                if(generation.get()==run)prefs.edit().putString("transfer_status",if(response.optBoolean("available"))"同步完成 · 电脑来源 ${rows.length()} 词"+(if(skipped>0)"（另有 $skipped 词日期异常已跳过）" else "")+"；手机成绩独立保存" else "学习档案已检查备份；电脑尚未找到生词本文件").apply()
             }catch(error:Exception){if(generation.get()==run)prefs.edit().putString("transfer_status",error.message ?: "同步失败，连接后重试").apply()}
             finally{running.set(false)}
         }
