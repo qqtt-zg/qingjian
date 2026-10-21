@@ -33,4 +33,25 @@ Android 的模型与 AAR 构建输入仍放在模块原有 `app/src/main/assets/
 
 移动 AVD 时先停止模拟器，再更新对应 `.ini` 的 `path` 和生成配置中的旧路径。磁盘文件、相对 backing image 和快照一同保留；迁移前后校验文件，不以新建空模拟器代替数据迁移。Android Studio 默认设备目录中的其他模拟器不参与本项目迁移。
 
+## 仓库路径含中文时的构建
+
+仓库路径带中文（本机是 `青简`）时，**JVM 单元测试跑不起来**：JDK 17 的 `sun.jnu.encoding` 跟着系统区域走（本机是 GBK），Gradle 把 classpath 传给测试 worker 时中文被转坏，worker 报 `ClassNotFoundException`，而编译与 APK 打包都不受影响。
+
+对策：**给仓库建一个纯 ASCII 的目录联接**，Android 构建走联接路径。
+
+```powershell
+cmd /c "mklink /J D:\qj-link D:\vibe_codeing\青简"
+$env:JAVA_HOME = (Get-ChildItem .local/tools/jdk17 -Directory)[0].FullName
+$env:ANDROID_HOME = Join-Path $env:LOCALAPPDATA 'Android\Sdk'
+$gradle = (Get-ChildItem "$env:USERPROFILE\.gradle\wrapper\dists\gradle-8.13-bin" -Recurse -Filter gradle.bat)[0].FullName
+& $gradle -p D:\qj-link\apps\android-speech :app:testDebugUnitTest --console=plain --offline
+```
+
+联接只影响路径怎么写，文件还是同一份。`assembleDebug` 与 instrumentation 探针在原路径下也能跑，只有 JVM 单元测试必须走联接。
+
+顺带记两个写 .qj 读器时踩的坑（`crates/qingjian-format` 的格式）：
+- `ByteBuffer.duplicate()` 会把字节序**重置回大端**，每次 duplicate 之后都要重新 `order(LITTLE_ENDIAN)`。
+- 绝对索引是相对 buffer 起点算的，各分节要记基址；不能用 position 去切分节，那会把绝对索引带偏。
+- 中文一个字三个字节，偏移要按**字节**算，不能用 `StringBuilder.length()`（那是字符数）。
+
 历史诊断与构建输入记录按原样归档，其中记录的旧路径表示当时的构建现场，不作为当前工具路径使用。
