@@ -5,6 +5,9 @@ import android.app.Activity
 import android.app.AlertDialog
 import android.os.Bundle
 import org.qingjian.speech.R
+import org.qingjian.speech.learning.glossary.GlossaryDownload
+import org.qingjian.speech.learning.glossary.GlossaryRelease
+import java.util.concurrent.Executors
 
 class DataSettingsActivity : Activity() {
     override fun onCreate(state: Bundle?) {
@@ -25,11 +28,49 @@ class DataSettingsActivity : Activity() {
             }.apply { setTextColor(getColor(R.color.system_red)) })
         }
         ui.card(column) { card ->
+            card.addView(ui.text("词汇表", 20f))
+            card.addView(ui.text("随包词汇表提供中英互查，建词与查词都在本机完成，不联网。", muted = true))
+            card.addView(ui.button("下载词汇表") { download() })
+        }
+        ui.card(column) { card ->
             card.addView(ui.button("开源许可与第三方说明") {
                 val notices = assets.open("THIRD-PARTY.txt").bufferedReader().use { it.readText() }
                 AlertDialog.Builder(this).setTitle("开源来源与许可说明").setMessage(notices).setPositiveButton("关闭", null).show()
             })
         }
         setContentView(ui.page("数据与关于", column))
+    }
+
+    /**
+     * 下载两张释义表。表是公开数据、免鉴权，但本版还没配好地址与哈希时直接说明，
+     * 不让用户看到一个必然失败的网络请求。
+     */
+    private fun download() {
+        if (!GlossaryRelease.configured()) {
+            AlertDialog.Builder(this)
+                .setMessage("本版还没配好词汇表地址，请等下一次更新。没有词汇表时，建词与查词仍可手动输入。")
+                .setPositiveButton("确定", null).show()
+            return
+        }
+        AlertDialog.Builder(this)
+            .setMessage("下载中英两张词汇表（约 19MB），下载完成后校验完整性再安装。")
+            .setNegativeButton("取消", null)
+            .setPositiveButton("下载") { _, _ ->
+                val worker = Executors.newSingleThreadExecutor()
+                val downloader = GlossaryDownload(this, { false }) { }
+                worker.execute {
+                    val result = runCatching {
+                        for (asset in GlossaryRelease.assets()) downloader.install(asset, GlossaryRelease.url(asset.name))
+                    }
+                    runOnUiThread {
+                        val text = result.fold(
+                            onSuccess = { "词汇表已下载，可以离线查词了" },
+                            onFailure = { "词汇表下载失败：${it.message ?: "未知原因"}；已装好的表不受影响" })
+                        AlertDialog.Builder(this).setMessage(text).setPositiveButton("确定", null).show()
+                        worker.shutdown()
+                        downloader.close()
+                    }
+                }
+            }.show()
     }
 }
