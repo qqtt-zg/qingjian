@@ -59,6 +59,14 @@ COPYFILE_DISABLE=1 tar -czf "$OUT/qingjian-data.tar.gz" -C "$OUT/stage" data
 (cd "$OUT" && shasum -a 256 ./qingjian-data.tar.gz | tee SHA256SUMS)
 du -h "$OUT/qingjian-data.tar.gz"
 
+# 手机只下释义表，不该为两张表拉 42MB 的数据包（lm.qj 就有 42MB）。
+# 独立资产同时是「手机不需要 Rust 工具链」的前提：手机按 URL + SHA-256 自取。
+MOBILE_FILES=(glossary-en.qj glossary-zh.qj)
+for f in "${MOBILE_FILES[@]}"; do
+  cp "data/generated/$f" "$OUT/$f"
+done
+(cd "$OUT" && shasum -a 256 "${MOBILE_FILES[@]}" | tee -a SHA256SUMS)
+
 [[ "$MODE" == "pack" ]] && exit 0
 
 if [[ -z "$TAG" ]]; then
@@ -68,14 +76,21 @@ fi
 [[ "$TAG" =~ ^data-v[0-9]+$ ]] || { echo "标签要写成 data-vN：$TAG" >&2; exit 1; }
 gh release view "$TAG" >/dev/null 2>&1 && { echo "$TAG 已存在，数据版本不覆盖" >&2; exit 1; }
 
-sha_of() { grep " ./$1\$" "$OUT/SHA256SUMS" | cut -d' ' -f1; }
+sha_of() { grep " \./$1\$" "$OUT/SHA256SUMS" | cut -d' ' -f1; }
+# 释义表单独上传：手机端按 data.lock 里的 SHA-256 校验后原子安装。
+ASSETS=("$OUT/qingjian-data.tar.gz")
+for f in "${MOBILE_FILES[@]}"; do
+  ASSETS+=("$OUT/$f")
+done
 gh release create "$TAG" --prerelease --target "$TARGET" --title "产品数据 $TAG" \
-  --notes "单个 qingjian-data.tar.gz 包含运行时词库、语言模型、释义表、含章·通变（hanzhang-tongbian-small.qjm）和含章·知微（hanzhang-zhiwei-small.qjm）。仓库 tools/release/data.lock 钉住压缩包的 SHA-256。" \
-  "$OUT/qingjian-data.tar.gz"
+  --notes "qingjian-data.tar.gz 包含运行时词库、语言模型、释义表、含章·通变（hanzhang-tongbian-small.qjm）和含章·知微（hanzhang-zhiwei-small.qjm）；glossary-en.qj / glossary-zh.qj 是给手机单独下载的释义表（不必拉整个数据包）。仓库 tools/release/data.lock 钉住每个资产的 SHA-256。" \
+  "${ASSETS[@]}"
 
 cat > "$LOCK" <<EOF
 # 产品数据版本，data-bundle.sh 写、data-fetch.sh 读；不要手改
 tag = $TAG
 qingjian-data.tar.gz = $(sha_of qingjian-data.tar.gz)
+glossary-en.qj = $(sha_of glossary-en.qj)
+glossary-zh.qj = $(sha_of glossary-zh.qj)
 EOF
 echo "已发 ${TAG}，锁文件已更新（记得提交）"

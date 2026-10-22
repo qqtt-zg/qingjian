@@ -136,3 +136,46 @@ jobs:
       # 安装包另带一份 32 位 DLL（企业微信 / WPS 这类 32 位应用只能加载它）
       - name: Check (TSF DLL, 32-bit)
         run: cargo check -p qingjian-windows-tsf --target i686-pc-windows-msvc --locked
+
+  android:
+    runs-on: ubuntu-26.04
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: apps/android-speech
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad # v6.1.0
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      # 官方 AAR 与音色模型按 dependencies.json 下载并校验 SHA-256；仓库里不存二进制。
+      # 缓存放在仓库根的 .local 下（prepare.py 的约定），键跟着 dependencies.json 走。
+      - name: Cache Android dependencies
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: .local/downloads/android-speech
+          key: android-speech-deps-${{ hashFiles('apps/android-speech/dependencies.json') }}
+
+      - name: Prepare dependencies
+        working-directory: .
+        run: python3 apps/android-speech/prepare.py
+
+      # wrapper 入库是为了在 CI 上拿到确定版本的 Gradle，不依赖 runner 预装；
+      # 分布包的 SHA-256 钉在 gradle/wrapper/gradle-wrapper.properties。
+      - name: Unit tests
+        run: ./gradlew :app:testDebugUnitTest --console=plain --stacktrace
+
+      - name: Upload test reports
+        if: failure()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: android-unit-test-reports
+          if-no-files-found: ignore
+          path: |
+            apps/android-speech/app/build/reports/tests/**
+            apps/android-speech/app/build/test-results/**
