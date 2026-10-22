@@ -8,7 +8,12 @@ import org.junit.Test
 
 class GlossaryLookupTest {
     /** 随包表里有「候选」，没有「扭矩」。 */
-    private fun table(): Glossary {
+    private fun table(): Glossary = table(listOf("候选" to "candidate", "部署" to "deploy"))
+
+    /** 英→中方向的随包表：键是小写英文。 */
+    private fun englishTable(): Glossary = table(listOf("candidate" to "候选人", "deploy" to "部署"))
+
+    private fun table(rows: List<Pair<String, String>>): Glossary {
         val file = java.nio.file.Files.createTempFile("qingjian-lookup", ".qj").toFile()
         file.deleteOnExit()
         // arena 必须按字节算偏移：中文一个字三个字节，用字符数会错位。
@@ -16,14 +21,14 @@ class GlossaryLookupTest {
         val entries = mutableListOf<ByteArray>()
         val records = mutableListOf<ByteArray>()
         var senseIndex = 0
-        for (word in listOf("候选", "部署")) {
+        for ((word, text) in rows) {
             val wordBytes = word.toByteArray(Charsets.UTF_8)
             val wordStart = arena.size()
             arena.write(wordBytes)
             val posBytes = "n.".toByteArray(Charsets.UTF_8)
             val posStart = arena.size()
             arena.write(posBytes)
-            val textBytes = (if (word == "候选") "candidate" else "deploy").toByteArray(Charsets.UTF_8)
+            val textBytes = text.toByteArray(Charsets.UTF_8)
             val textStart = arena.size()
             arena.write(textBytes)
             val record = java.nio.ByteBuffer.allocate(20).order(java.nio.ByteOrder.LITTLE_ENDIAN)
@@ -118,6 +123,16 @@ class GlossaryLookupTest {
         val lookup = GlossaryLookup(table(), PersonalGlosses.of(personalRows(), "en", table()))
         assertNotNull(lookup.find("部署"))
         assertNull(lookup.find("没有这个词"))
+    }
+
+    @Test
+    fun lookupFindsEnglishKeysRegardlessOfCase() {
+        // 协议 §2.2：glossary-zh 的键是小写，用户敲的是 Deploy / DEPLOY
+        val lookup = GlossaryLookup(englishTable(), PersonalGlosses.of(emptyList(), "en", null))
+        assertEquals("部署", lookup.find("Deploy")!!.text)
+        assertEquals("部署", lookup.find("DEPLOY")!!.text)
+        assertEquals("部署", lookup.find("deploy")!!.text)
+        assertNull(lookup.find("deployed"))
     }
 
     @Test
