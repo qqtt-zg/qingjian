@@ -142,6 +142,42 @@ class LearningSyncTest(unittest.TestCase):
         self.assertEqual(context["words"], [])
         self.assertEqual(context["glosses"], [])
         self.assertFalse(context["truncated"])
+        # 字段形状不随「有没有词库」变：手机不该为了拿这个计数先判断 available。
+        self.assertEqual(context["invalid_date_rows"], 0)
+        self.assertFalse(context["glosses_truncated"])
+
+    def test_context_counts_broken_dates_even_when_nothing_is_available(self):
+        context = self.sync.context()
+        self.assertEqual(context["invalid_date_rows"], 0)
+        self.assertIn("invalid_date_rows", context)
+
+    def test_context_reports_glossary_truncation(self):
+        """个人释义表超过条数上限时要明说，不能静默少几条。"""
+        today = datetime.date.today()
+        recent = (today - datetime.timedelta(days=1)).isoformat()
+        self._write_vocabulary(f"en\tdeploy\t1\t1\t0\t{recent}\t{recent}\t0\t部署\t部署句子\n")
+        lines = ["# 词\t[词性. ]译词"] + [f"词{index}\tn. word{index}" for index in range(30)]
+        (self.root / "user-glossary-en.tsv").write_text("\n".join(lines), encoding="utf-8")
+        with patch("learning_sync.CONTEXT_MAX_GLOSSES", 10):
+            context = self.sync.context()
+        self.assertEqual(len(context["glosses"]), 10)
+        self.assertTrue(context["glosses_truncated"])
+
+    def test_context_keeps_the_response_within_the_byte_limit_even_for_glosses(self):
+        """释义表自己撑爆上限时也要裁：2 MiB 是硬约定，不能因为释义优先就破例。"""
+        today = datetime.date.today()
+        recent = (today - datetime.timedelta(days=1)).isoformat()
+        self._write_vocabulary(f"en\tdeploy\t1\t1\t0\t{recent}\t{recent}\t0\t部署\t部署句子\n")
+        lines = ["# 词\t[词性. ]译词"]
+        lines += [("词" * 200) + f"{index}\tn. " + ("x" * 400) for index in range(50)]
+        (self.root / "user-glossary-en.tsv").write_text("\n".join(lines), encoding="utf-8")
+        # 额度从「刚好放得下空信封」往上取几档，每一档都不能超
+        for limit in (250, 400, 1000, 3000, 20000):
+            with patch("learning_sync.CONTEXT_MAX_BYTES", limit):
+                context = self.sync.context()
+            body = json.dumps(context, ensure_ascii=False).encode("utf-8")
+            self.assertLessEqual(len(body), limit, f"上限 {limit} 时响应 {len(body)} 字节")
+            self.assertTrue(context["glosses_truncated"])
 
     def test_context_route_requires_pairing(self):
         state = SpeechState("receive-token", [])

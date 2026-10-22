@@ -116,6 +116,9 @@ class LearningSync:
 
         桌面端不比对随包表：那要它能读 .qj，得为此写一个 Python 读器，而随包表本来就该在
         手机上。差集在手机端做——手机拿本地随包表比对后再合并，个人表优先。
+
+        返回 (释义条目, 是否因条数上限被截断)。截断必须报出去，静默少几条的话手机会把
+        缺的释义当成「桌面没有」，转头去问 AI。
         """
         result = []
         for path in sorted(self.vocabulary.parent.glob("user-glossary-*.tsv")):
@@ -136,11 +139,11 @@ class LearningSync:
                     if not cell.strip():
                         continue
                     part_of_speech, text, reading = parse_sense(cell)
+                    if len(result) >= CONTEXT_MAX_GLOSSES:
+                        return result, True
                     result.append({"language": language, "word": parts[0],
                                    "pos": part_of_speech, "text": text[:500], "reading": reading})
-                if len(result) >= CONTEXT_MAX_GLOSSES:
-                    return result
-        return result
+        return result, False
 
     def words(self):
         if not self.vocabulary.is_file():
@@ -177,8 +180,10 @@ class LearningSync:
             "truncated": False,
             "total": 0,
             "available": False,
+            "invalid_date_rows": 0,
             "words": [],
             "glosses": [],
+            "glosses_truncated": False,
         }
         if not self.vocabulary.is_file():
             return envelope
@@ -193,7 +198,9 @@ class LearningSync:
         envelope["total"] = len(inside)
         envelope["available"] = True
         envelope["invalid_date_rows"] = invalid_dates
-        envelope["glosses"] = self._personal_glosses()
+        glosses, glosses_truncated = self._personal_glosses()
+        envelope["glosses"] = glosses
+        envelope["glosses_truncated"] = glosses_truncated
         kept, truncated = self._fit(inside, envelope)
         envelope["words"] = kept
         envelope["truncated"] = truncated
@@ -204,9 +211,20 @@ class LearningSync:
 
         上限按 UTF-8 字节算，响应整体不超过 2 MiB；超了就把靠后的词条丢掉，
         并标 truncated 与总数，手机据此知道这不是全部。
+
+        个人释义表先占额度、再排词条：它是「桌面独有、手机拿不到」的数据，丢掉就
+        只能回去问 AI；词条这边丢掉的只是本轮候选，窗口外本来也会再出现。释义表
+        自己就撑爆上限时，连它一起裁——上限是硬约定，不能因为某一段优先就破例。
         """
         base = encoded_size(envelope)
         budget = CONTEXT_MAX_BYTES - base
+        if budget < 0:
+            # 释义表自己就撑爆上限：把它裁到放得下。base 是按当前（未裁的）释义表算的，
+            # 加上它的序列化长度正好还原出「空列表时还剩多少额度」。
+            envelope["glosses"] = self._fit_glosses(envelope["glosses"], budget + encoded_size(envelope["glosses"]))
+            envelope["glosses_truncated"] = True
+            base = encoded_size(envelope)
+            budget = CONTEXT_MAX_BYTES - base
         kept = []
         used = 0
         for word in words:
@@ -216,6 +234,18 @@ class LearningSync:
             kept.append(word)
             used += size
         return kept, False
+
+    def _fit_glosses(self, glosses, budget):
+        """个人释义表超上限时按原顺序裁到放得下为止。"""
+        kept = []
+        used = 0
+        for gloss in glosses:
+            size = encoded_size(gloss) + 2
+            if used + size > budget:
+                return kept
+            kept.append(gloss)
+            used += size
+        return kept
 
     def backup(self, data):
         if not isinstance(data, dict) or set(data) != {"schema", "created", "tables"} or data["schema"] != 1:
