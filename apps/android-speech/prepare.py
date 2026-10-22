@@ -1,4 +1,9 @@
-"""获取锁定哈希的官方依赖；模型只解压到本 Android 工程的 assets。"""
+"""获取锁定哈希的官方依赖；模型只解压到本 Android 工程的 assets。
+
+释义表（`app/src/main/assets/glossaries/*.qj`）不入库、也不由本脚本取：
+它们是产品数据，由仓库根的 `data/generated/` 生成后拷进来，或从已安装的构建里拿。
+个人版不发布独立数据资产，COPY 一份即可。
+"""
 import hashlib
 import json
 from pathlib import Path

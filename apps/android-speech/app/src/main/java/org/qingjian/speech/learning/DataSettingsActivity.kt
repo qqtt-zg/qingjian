@@ -29,8 +29,9 @@ class DataSettingsActivity : Activity() {
         }
         ui.card(column) { card ->
             card.addView(ui.text("词汇表", 20f))
-            card.addView(ui.text("随包词汇表提供中英互查，建词与查词都在本机完成，不联网。", muted = true))
-            card.addView(ui.button("下载词汇表") { download() })
+            card.addView(ui.text("词汇表已随安装包提供，中英互查在本机完成，不联网；装好即可用，无需下载。", muted = true))
+            // 更新通道未启用时不显示按钮：给一个只会弹「已是最新」的入口没有意义。
+            if (GlossaryRelease.configured()) card.addView(ui.button("检查词汇表更新") { download() })
         }
         ui.card(column) { card ->
             card.addView(ui.button("开源许可与第三方说明") {
@@ -42,18 +43,12 @@ class DataSettingsActivity : Activity() {
     }
 
     /**
-     * 下载两张释义表。表是公开数据、免鉴权，但本版还没配好地址与哈希时直接说明，
-     * 不让用户看到一个必然失败的网络请求。
+     * 把随包表更新到更新的 `data-vN` 版本。只在 `GlossaryRelease.configured()` 为真时
+     * 显示按钮，所以这里不再重复判断；随包表照常可用，这一步是可选增量更新。
      */
     private fun download() {
-        if (!GlossaryRelease.configured()) {
-            AlertDialog.Builder(this)
-                .setMessage("本版还没配好词汇表地址，请等下一次更新。没有词汇表时，建词与查词仍可手动输入。")
-                .setPositiveButton("确定", null).show()
-            return
-        }
         AlertDialog.Builder(this)
-            .setMessage("下载中英两张词汇表（约 19MB），下载完成后校验完整性再安装。")
+            .setMessage("下载中英两张词汇表（约 17MB），下载完成后校验完整性再替换。")
             .setNegativeButton("取消", null)
             .setPositiveButton("下载") { _, _ ->
                 val worker = Executors.newSingleThreadExecutor()
@@ -64,8 +59,8 @@ class DataSettingsActivity : Activity() {
                     }
                     runOnUiThread {
                         val text = result.fold(
-                            onSuccess = { "词汇表已下载，可以离线查词了" },
-                            onFailure = { "词汇表下载失败：${it.message ?: "未知原因"}；已装好的表不受影响" })
+                            onSuccess = { "词汇表已更新" },
+                            onFailure = { "词汇表更新失败：${it.message ?: "未知原因"}；原来的表照常可用" })
                         AlertDialog.Builder(this).setMessage(text).setPositiveButton("确定", null).show()
                         worker.shutdown()
                         downloader.close()

@@ -13,7 +13,7 @@ android {
     }
     compileOptions { sourceCompatibility JavaVersion.VERSION_17; targetCompatibility JavaVersion.VERSION_17 }
     kotlinOptions { jvmTarget = '17' }
-    androidResources { noCompress += ['onnx', 'bin'] }
+    androidResources { noCompress += ['onnx', 'bin', 'qj'] }
 }
 dependencies {
     implementation files('libs/sherpa-onnx-1.13.8.aar')
