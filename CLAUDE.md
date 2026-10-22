@@ -29,6 +29,10 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - `apps/windows`：`server`（Server 进程：Engine + IPC + 自绘候选窗与状态条）+ `tsf`（TSF DLL）+ `settings`（旧版设置，WinUI 3，只作兜底，新版 `apps/settings` 为主）+ `installer`（Inno）。DLL 不能带 Engine 的依赖树，所以是两个 package。
 - `apps/linux`：`server`（Engine + Unix socket）+ `fcitx5` / `fcitx4`（框架事件、默认面板）+ `scripts`（用户级安装卸载、`package.sh` 打 Fcitx5 预编译包）；Server 手动启动，见 `docs/notes/linux-fcitx5.md` 和 `docs/notes/linux-fcitx4.md`。
 - `tools/dict-convert`、`tools/gloss-gen`、`tools/corpus`：产品数据生成（词库 / 语言模型 / 释义表 / emoji / 英文词表），输出到 `data/generated/`（gitignore）。
+- `tools/release`：产品数据与发版脚本（`data-bundle.sh` 发 `data-vN` 数据包，`data-fetch.sh` 按 `data.lock` 取并校验）。
+- `tools/eval`：模型与排序的评测脚本（评测尺子见 `docs/plan/model-eval.md`）。
+- `tools/speech-relay`：电脑↔手机配对中继（Python，纯标准库 + 自带 `vendor/`）：生词来源、学习备份、朗读与更新的 HTTP 接口；入口 `server.py`，`/api/learning/*` 在 `learning_sync.py`。
+- `apps/android-speech`：Android 学习与朗读 App（Kotlin，独立 Gradle 工程，不参与 Rust workspace、不随主发版）；构建、JVM 单元测试与本机模拟器见 `docs/notes/build-layout.md` 和它自己的 `README.md`。
 - `assets/`：随包数据源与样例，各目录有 README 写来源与许可。雾凇拼音（GPL）已彻底移除，不要再引入。
 - `target/`：Rust 编译缓存和打包中转；不要在这里保存工具、模拟器、备份或分发安装包。
 - `.local/`：本机工具、依赖下载、音色源、Android 模拟器、备份与诊断资料，不入 Git。

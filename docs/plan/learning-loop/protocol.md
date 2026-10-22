@@ -17,6 +17,7 @@
   "total": 2,
   "available": true,
   "invalid_date_rows": 0,
+  "glosses_truncated": false,
   "words": [
     {
       "language": "en",
@@ -38,7 +39,8 @@
 }
 ```
 
-- `total` 是窗口内词的总数，`truncated` 为真时说明只返回了一部分。`available` 区分「电脑没有生词本」与「生词本是空的」；`invalid_date_rows` 是日期异常被跳过的行数，手机要在状态里说出来——静默丢掉的话，用户只看到「0 词」却不知道原因。
+- `total` 是窗口内词的总数，`truncated` 为真时说明只返回了一部分。`available` 区分「电脑没有生词本」与「生词本是空的」；`invalid_date_rows` 是日期异常被跳过的行数，手机要在状态里说出来——静默丢掉的话，用户只看到「0 词」却不知道原因。这三个字段**无论有没有词库都在**，手机不必先判断 `available` 再取。
+- `glosses_truncated` 表示个人释义表因条数或字节上限被裁过。释义少几条时手机会把缺的当成「桌面没有」而转头去问 AI，所以裁了必须报。
 - `glosses` 是个人释义表原样（见「桌面与手机互相更新」），手机拿本地随包表比对后再合并。
 
 **术语约定（全文通用）**：三个「来源」不是一件事，字段名不共用——
@@ -150,7 +152,7 @@
 
 **个人释义表由桌面端原样下发，差集在手机端做。** 桌面端只读 `user-glossary-<语言>.tsv`——它就在 `%APPDATA%\Qingjian\` 下，跟中继工具已经读着的 `user-vocab.tsv` 同一个目录，是**纯 TSV，零新依赖**。桌面端**不比对随包表**（那要它能读 `.qj`，得为此写一个 Python 读器，而随包表本来就该在手机上）。
 
-手机端拿本地随包表做差集：只把「随包表里没有的」那些并入本地表，个人表优先。差集天然很小（用户实际遇到、且表里没有的词，通常几十到几百条），因此不需要截断策略，也不需要给个人释义表加时间戳（它现在只有 `HashMap<String, Translation>`，没有任何顺序信息）。
+手机端拿本地随包表做差集：只把「随包表里没有的」那些并入本地表，个人表优先。差集天然很小（用户实际遇到、且表里没有的词，通常几十到几百条），所以**正常不会触发上限**；实现仍保留 2000 条与单条 500 字的硬上限兜住异常大的表，超限时用 `glosses_truncated` 报出去。不需要给个人释义表加时间戳（它现在只有 `HashMap<String, Translation>`，没有任何顺序信息）。
 
 手机合并时**个人释义表优先于随包表**，与桌面端 `LayeredTranslator` 的「个人表优先、随包表兜底」一致。桌面端没给个人表的英→中方向（`glossary-zh` 只有随包表一个来源），那一路仍只有随包表。
 
@@ -172,10 +174,10 @@ SectionEntry × N，每条 24 字节：tag[4] | reserved u32 | offset u64 | leng
 
 依据 `crates/qingjian-format/src/layout/header.rs`、`layout/section_entry.rs` 与 `crates/qingjian-translate/src/glossary/{entry_record,sense_record}.rs`。
 
-- **不复刻哈希函数**：线性扫 `ENTR` 建「词 → 条目」字典（23.2 万条，秒级），`HASH` 整节忽略。比复刻 FNV-1a + fmix64 简单，也没有两边哈希实现不一致的风险。
+- **不复刻哈希函数**：精确查按 UTF-8 字节做二分（`ENTR` 本来就按词条码点升序），子串搜索扫一遍词条表；`HASH` 整节忽略。比复刻 FNV-1a + fmix64 简单，也没有两边哈希实现不一致的风险。
 - 用 `FileChannel.map` 映射文件，按需切片，不整表读进内存。
-- 查 `glossary-zh` 时键先做 ASCII 小写（它的键是小写，桌面端查找也是先原样再小写，见 `engine/commit/mod.rs:41-44`）。
-- 查不到不报错、不猜、不返回近义词。
+- 查 `glossary-zh` 时先原样查、查不到再做 **ASCII** 小写再查一次（与桌面端 `engine/commit/mod.rs:41-44` 一致；只用 ASCII 映射，不用 Unicode 小写）。
+- 打开时校验分节是否落在文件内；查询期越界一律返回「查不到」，不抛异常——下载校验还没做，半截文件不能把 App 崩掉。
 
 #### 手机侧的词汇查询
 

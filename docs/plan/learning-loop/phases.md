@@ -7,20 +7,27 @@
 同一个提交里改 `docs/user/learning/mobile.md`，含它的「当前版本范围」一节。
 每个阶段至少有一条可自动跑的测试留在仓库里，不靠人肉点一遍就算过。
 
+**现状**：Android 的 JVM 单元测试已接进 CI（`.github/workflows/ci.yml` 的 `android` job，走 `gradlew` + `setup-java 17` + `prepare.py` 取依赖）；中继与 Rust 侧本来就在 CI 里。
+
 ### 阶段0A：修复来源，建立可验证输入
 
 - [x] 修复词库ISO日期解析：**日期缺失或非法时整行跳过**（与桌面端 `file.rs:52-53` 的 `?` 短路一致），只记 `invalid_date_rows` 计数；确定新旧手机/电脑的日期协议并同步修改Transfer。`last` 字段仍是 UTC 午夜的 Unix 秒数（旧接口契约不变），手机端拿不到就记 0 表示未知，不再写 1970 或当前时间。
 - [x] 顺带修掉连接工具的错误回复丢响应：错误回复前必须把请求体读干净。带着没读完的请求体关连接，Windows 发 RST 而不是 FIN，客户端只看到「连接被中止」，手机端于是把「配对地址无效」显示成笼统的「同步失败」。这也是仓库里测试偶发失败（约一半）的原因。
 - [x] 实现上下文路由 `GET /api/learning/context`、字段/字节上限及稳定截断；**只此一个来源接口**，旧 `/api/learning/words` 不动；暂不采集应用名。窗口只按 `last` 过滤（上游没有逐日历史），截断按 `committed` 降序、`language/english` 升序稳定排序并报 `total` 与 `truncated`。
-- [x] 上下文里带上**个人释义表原样**：桌面端读 `user-glossary-<语言>.tsv`（与 `user-vocab.tsv` 同目录，纯 TSV）整份发出，**差集在手机端做**——手机用本地随包表比对后再合并，个人表优先。桌面端不读 `.qj`。
-- [ ] 静态表进 `data` Release 的方式定下来：`tools/release/data-bundle.sh` 已有 `glossary-*.qj` 在 `qingjian-data.tar.gz` 里，手机要单独下，需要给 Release 补**独立资产**（含 SHA-256 与大小），不必下整个 42MB 的数据包。
-- [x] 手机侧写 `.qj` 只读器（中→英的 `glossary-en` 与英→中的 `glossary-zh` 两张，同一个表无关读器，线性扫 `ENTR`，不复刻哈希）+ 下载与校验；用合成的迷你 `.qj` 做测试。**已做只读器**（`learning/glossary/Glossary.kt`）：精确查走二分，子串搜索扫一遍词条表，都不建内存索引；JVM 单元测试覆盖，并额外读一次本机真实产品词表（23 万条）验布局与耗时。**下载与校验还没做**，待定发布通道。
+- [x] 上下文里带上**个人释义表**：桌面端读 `user-glossary-<语言>.tsv`（与 `user-vocab.tsv` 同目录，纯 TSV）整份发出，**差集在手机端做**——手机用本地随包表比对后再合并，个人表优先。桌面端不读 `.qj`。
+- [x] 手机端把个人释义表并进本地表：`Transfer` 读 `glosses`，经 `GlossaryJson.toPersonalGlosses()` + `PersonalGlosses.of()` 做差集（个人表优先、随包表兜底），结果由 `learning/glossary/GlossaryStore.kt` 持久化到 `learning_glossaries`。随包表还没有下载通道时 `table` 为 null，个人释义全留——这是协议约定的降级，不是错误。
+- [x] 静态表进 `data` Release 的方式定下来：`tools/release/data-bundle.sh` 现在除了 `qingjian-data.tar.gz`，还把 `glossary-en.qj` / `glossary-zh.qj` 作为**独立资产**上传，SHA-256 一并写进 `tools/release/data.lock`；手机只下这两张表，不必下整个 42MB 数据包。
+- [x] 手机侧写 `.qj` 只读器（中→英的 `glossary-en` 与英→中的 `glossary-zh` 两张，同一个表无关读器，不复刻哈希）+ 用合成的迷你 `.qj` 做测试。**已做只读器**（`learning/glossary/Glossary.kt`）：精确查走二分，子串搜索扫一遍词条表，都不建内存索引；JVM 单元测试覆盖，并额外读一次本机真实产品词表（23 万条）验布局与耗时。
+- [x] 静态表的**下载与校验**：`learning/glossary/GlossaryDownload.kt` 按 `data-vN` 的公开地址下载，先写 `.download` 临时文件，长度与 SHA-256 都校验通过才原子改名——断线不留半截、哈希不符不替换已装好的表；`GlossaryInstall.kt` 的判定规则有 JVM 测试，设置页「数据与关于 → 下载词汇表」是入口。**当前版本哈希尚未填**（`GlossaryRelease.HASHES` 为空）：`data-v7` 发布时没有这两份独立资产，下一次 `data-bundle.sh` 发版后把 `data.lock` 里的两行抄过来即可，未填时界面明说「本版还没配好词汇表地址」。
 - [x] 引入 JVM 单元测试层（`junit:junit:4.13.2`）：纯逻辑（文件解析、字段裁剪、合并优先级、协议回退）放这里，秒级反馈；UI 与跨进程流程仍用 instrumentation 探针。
-- [ ] 来源、上下文、备份分离错误处理，兼容404，不覆盖非空手机笔记。**手机侧还没接新接口**：要改成先试 `/api/learning/context`、404 再退回旧的 `/api/learning/words`，并把 `Transfer.run()` 的单个 try 块拆开——一步失败不阻断其他步骤，失败也不能解释成「所有词已删除」。
-- [ ] 同步 `CLAUDE.md` 目录地图：补 `apps/android-speech`（Android 学习与朗读 App，Kotlin，独立于 Rust workspace，不参与主发版）与 `tools/speech-relay`（电脑↔手机配对中继，Python）；顺带补 `tools/eval`、`tools/release`。
+- [x] 来源、上下文、备份分离错误处理，兼容404，不覆盖非空手机笔记。`Transfer.run()` 拆成拉来源 / 传备份 / 刷新状态三步，各自 `runCatching` 隔离，一步失败不阻断另两步；先试 `/api/learning/context`，**只有 404** 才退回旧的 `/api/learning/words`（401/403 提示配对失效、其它码报失败并保留上次数据）；写库只在 `words.meaning` 为空时补笔记，不覆盖非空。
+- [x] 同步 `CLAUDE.md` 目录地图：补 `apps/android-speech`（Android 学习与朗读 App，Kotlin，独立于 Rust workspace，不参与主发版）与 `tools/speech-relay`（电脑↔手机配对中继，Python）；顺带补 `tools/eval`、`tools/release`。
 - 验收：上游真实格式的七列/十列样例都能返回词；**日期非法的行两端都跳过**（中继端与桌面端对「这个词是否存在」的判断一致，用同一份坏日期 fixture 交叉验证）；构建30/31与新版的协议兼容；401、404、截断、失败保留、独立备份路径均有测试。
+  **现状**：七列/十列、坏日期、401、截断、备份已有测试；**坏日期与桌面端的交叉 fixture、404 回退、构建30/31 兼容均未做**。
 - 验收：手机能用合成的迷你 `.qj` 读出词与释义（**不拿随包大表当测试材料**）；大小写混合的英文键返回同一条；下载中断不留下半截文件，SHA-256 不符不替换已装好的表。
+  **现状**：迷你 `.qj` 与真实表布局已验；**大小写混合返回同一条随只读器的 ASCII 小写回退一起补**；下载与校验未做，无从验。
 - 验收：桌面端发的个人释义表是**原样整份**（与 `user-glossary-<语言>.tsv` 逐行一致）；手机端并入后**本地表里只多出随包表没有的词**（用同一份 fixture 交叉验证桌面与手机两端判断一致）；差集为空时不报错；差集里的词在手机端优先于随包表。
+  **现状**：桌面端发的是解析后的结构化条目（不是逐行原样），且条数上限 2000、单条 `text` 截 500 字，超限时以 `glosses_truncated` 报出；手机端差集规则有 JVM 测试，但**未接线**。
 
 ### 阶段0B：事件、投影与执行数据地基
 
