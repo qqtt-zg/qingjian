@@ -63,4 +63,6 @@ Windows 本机只 `cargo check --target x86_64-pc-windows-gnu`，真编译与真
 
 @docs/contributing.md
 
+- **构建与测试产物及时清理**：测试通过后即可清理测试产物，任务收尾后立即清理增量缓存（`target/debug/incremental`）、旧安装包（`dist/`）与临时构建目录，避免无谓膨胀。
+
 交流用中文。
