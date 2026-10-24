@@ -73,7 +73,15 @@ impl Component for Settings {
                 self.save("general", "scheme", general::SCHEMES[i].1);
             }
             Message::ShuangpinRawPreedit(on) => self.save("general", "shuangpin_raw_preedit", on),
-            Message::Wubi(on) => self.save("general", "wubi", if on { "wubi86" } else { "" }),
+            Message::Wubi(on) => self.save(
+                "general",
+                "code",
+                if on {
+                    qingjian_platform::code_schemes::WUBI86
+                } else {
+                    "off"
+                },
+            ),
             Message::Traditional(Some(i)) if i < general::TRADITIONAL.len() => {
                 self.save("general", "traditional_variant", general::TRADITIONAL[i].1);
             }
@@ -261,9 +269,6 @@ impl Component for Settings {
             }
             Message::TranslationSecond(Some(i)) if i < shortcut::MODIFIERS.len() => {
                 self.save("shortcut", "translation_second", shortcut::MODIFIERS[i].1);
-            }
-            Message::DeleteCandidate(Some(i)) if i < shortcut::MODIFIERS.len() => {
-                self.save("shortcut", "delete_candidate", shortcut::MODIFIERS[i].1);
             }
             Message::TranslateSelection(Some(i)) if i < shortcut::MODIFIERS.len() => {
                 let key = self.config.shortcut.translate_selection.key;

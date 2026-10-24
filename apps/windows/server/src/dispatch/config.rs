@@ -2,7 +2,7 @@ use qingjian_core::TraditionalVariant;
 use qingjian_platform::protocol::KeyModifiers;
 use qingjian_platform::{
     Appearance, AppsConfig, CandidateRenderer, Config, FontSize, HighlightKeys, KeyCombo,
-    LayoutMode, NumpadDigit, PageKeys, PreeditMode, Scheme, SwitchKeys,
+    KeyHintMode, LayoutMode, NumpadDigit, PageKeys, PreeditMode, Scheme, SwitchKeys,
 };
 
 use super::RenderSettings;
@@ -97,7 +97,7 @@ pub struct RouterConfig {
     /// 关掉恢复老行为：标点进英文直输段。缺省开。
     pub punct_commits: bool,
 
-    /// 大千注音（[general] zhuyin）。
+    /// 大千注音（`[general]` zhuyin）。
     pub zhuyin: bool,
 
     /// 按应用的设置（`[apps]`），按宿主 exe 名认。
@@ -108,9 +108,6 @@ pub struct RouterConfig {
 
     /// 朗读当前页候选英文的修饰键；空组合关闭。
     pub speech_keys: KeyModifiers,
-
-    /// 删候选的修饰键（`[shortcut] delete_candidate`）。
-    pub delete_keys: KeyModifiers,
 
     /// 「翻译选中文字」快捷键（`[shortcut] translate_selection`）。
     pub translate_selection: KeyCombo,
@@ -124,11 +121,11 @@ pub struct RouterConfig {
     /// 状态条记住的位置（`[status_bar] x` / `y`，内容左上角物理像素）。
     pub status_pos: Option<(i32, i32)>,
 
+    /// 状态条大小（`[status_bar] size`，百分比，已收到 60–150）。
+    pub status_size: u8,
+
     /// 拼音侧方案（`[general] scheme`）。
     pub scheme: Scheme,
-
-    /// 形码侧开没开（`[general] wubi`）。与拼音同时开着就是混输。
-    pub wubi: bool,
 
     /// 繁体输出（`[general] traditional_variant`），给候选窗口主题显示简 / 繁。
     pub traditional: bool,
@@ -141,6 +138,12 @@ pub struct RouterConfig {
 
     /// 译词旁是否显示词性标注（`[general] translation_pos`）。随帧下发给候选窗。
     pub translation_pos: bool,
+
+    /// 键位提示（`[general] key_hint`）。
+    pub key_hint: KeyHintMode,
+
+    /// 键位提示窗口的不透明度与键盘大小，百分比（`[general] key_hint_opacity` / `key_hint_size`，已夹到范围内）。
+    pub key_hint_look: (u8, u8),
 }
 
 impl RouterConfig {
@@ -152,6 +155,11 @@ impl RouterConfig {
     /// 横排矩阵这套按键是否生效：开关开着（`[general] horizontal_grid`）而且排布是横排。
     pub fn grid_keys(&self) -> bool {
         self.horizontal_grid && self.layout == LayoutMode::Horizontal
+    }
+
+    /// 方向键分拼音行与候选两区（Core 的 `arrows::route`）：横排，而且高亮移动键选了 `←` / `→`。
+    pub fn two_area_arrows(&self) -> bool {
+        self.layout == LayoutMode::Horizontal && self.highlight_keys == HighlightKeys::LeftRight
     }
 
     /// 交给 UI 线程的画法。
@@ -207,18 +215,22 @@ impl From<&Config> for RouterConfig {
                 let (first, second) = config.shortcut.translation_keys();
                 (first.into(), second.into())
             },
-            delete_keys: config.shortcut.delete_keys().into(),
             speech_keys: config.shortcut.speech_keys().into(),
             translate_selection: config.shortcut.translate_selection,
             predict: config.shortcut.predict,
             status_enabled: config.status_bar.enabled,
             status_pos: config.status_bar.x.zip(config.status_bar.y),
+            status_size: config.status_bar.size.clamp(60, 150),
             scheme: config.general.scheme(),
-            wubi: config.general.wubi(),
             traditional: config.general.traditional() != TraditionalVariant::Off,
             aux_code_key: config.general.aux_code_key(),
             aux_code_show: config.general.aux_code_show,
             translation_pos: config.general.translation_pos,
+            key_hint: config.general.key_hint,
+            key_hint_look: (
+                config.general.key_hint_opacity.clamp(30, 100),
+                config.general.key_hint_size.clamp(60, 150),
+            ),
         }
     }
 }

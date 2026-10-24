@@ -6,6 +6,8 @@ mod cloud;
 mod composing;
 mod english;
 mod highlight;
+mod key_hint;
+mod menu;
 mod modes;
 mod numpad;
 mod prediction;
