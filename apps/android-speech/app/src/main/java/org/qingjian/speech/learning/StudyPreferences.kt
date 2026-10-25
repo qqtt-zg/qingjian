@@ -11,13 +11,26 @@ class StudyPreferences(context: Context) {
     val purpose get() = purposes[prefs.getInt("purpose", 0).coerceIn(purposes.indices)]
     val newWords get() = prefs.getInt("new_words", 5).takeIf { it in quotas } ?: 5
     val minutes get() = prefs.getInt("minutes", 10).takeIf { it in times } ?: 10
+    val revision get() = prefs.getInt("preferences_revision", 0)
     var lastWord: Long
         get() = prefs.getLong("last_word", 0)
         set(value) { prefs.edit().putLong("last_word", value).apply() }
 
     fun save(level: Int, purpose: Int, count: Int, time: Int) {
         require(level in levels.indices && purpose in purposes.indices && count in quotas && time in times)
-        prefs.edit().putInt("level", level).putInt("purpose", purpose).putInt("new_words", count).putInt("minutes", time).apply()
+        val oldLevel = prefs.getInt("level", 0)
+        val oldPurpose = prefs.getInt("purpose", 0)
+        val oldCount = prefs.getInt("new_words", 5)
+        val oldTime = prefs.getInt("minutes", 10)
+        val changed = (level != oldLevel || purpose != oldPurpose || count != oldCount || time != oldTime)
+        val nextRev = if (changed) revision + 1 else revision
+        prefs.edit()
+            .putInt("level", level)
+            .putInt("purpose", purpose)
+            .putInt("new_words", count)
+            .putInt("minutes", time)
+            .putInt("preferences_revision", nextRev)
+            .apply()
     }
 
     fun context(): JSONObject = JSONObject().put("基础", level).put("学习用途", purpose)

@@ -9,13 +9,13 @@ import java.util.Locale
 object ReviewSchedule {
     fun record(db: SQLiteDatabase, wordId: Long, skill: String, correct: Boolean, now: Long = System.currentTimeMillis()) {
         db.delete("study_reviews", "word_id=? AND skill='EXPOSURE'", arrayOf(wordId.toString()))
-        val previous = db.rawQuery("SELECT streak,last_at FROM study_reviews WHERE word_id=? AND skill=?", arrayOf(wordId.toString(), skill)).use { if(it.moveToFirst()) it.getInt(0) to it.getLong(1) else 0 to 0L }
-        val format=SimpleDateFormat("yyyy-MM-dd",Locale.ROOT)
-        val sameDay=format.format(Date(previous.second))==format.format(Date(now))
-        val next = if(!correct)0 else if(sameDay&&previous.first>0)previous.first else (previous.first+1).coerceAtMost(5)
-        val days = listOf(1, 1, 3, 7, 14, 30)[next]
+        val previous = db.rawQuery("SELECT streak,last_at FROM study_reviews WHERE word_id=? AND skill=?", arrayOf(wordId.toString(), skill)).use {
+            if(it.moveToFirst()) it.getInt(0) to it.getLong(1) else 0 to 0L
+        }
+        val (next, _) = ReviewScheduleCore.calculateStreak(previous.first, previous.second, now, correct)
+        val nextDue = ReviewScheduleCore.calculateNextDue(next, now)
         db.execSQL("INSERT OR REPLACE INTO study_reviews(word_id,skill,streak,next_due,last_at) VALUES(?,?,?,?,?)",
-            arrayOf<Any>(wordId, skill, next, now + days * 86400000L, now))
+            arrayOf<Any>(wordId, skill, next, nextDue, now))
     }
 
     fun exposure(db: SQLiteDatabase, wordId: Long, now: Long = System.currentTimeMillis()) {

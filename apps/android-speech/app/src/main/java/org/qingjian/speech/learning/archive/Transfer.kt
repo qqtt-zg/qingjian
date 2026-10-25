@@ -102,8 +102,11 @@ object Transfer {
                     "SELECT 1 FROM words WHERE lookup=?",
                     arrayOf(english.trim().replace(Regex("\\s+"), " ").lowercase(Locale.ROOT))
                 ).use { it.moveToFirst() }
-                val id = book.addWord(english)
+                val id = book.addWord(english, "desktop-vocab")
                 val current = checkNotNull(book.word(id))
+                if (current.glossOrigin == "unknown") {
+                    book.setGlossOrigin(id, "desktop-vocab")
+                }
                 if (current.meaning.isBlank() && word.meaning.length <= 1000) book.setMeaning(id, word.meaning)
                 // 桌面的末见是 UTC 午夜的日期；解析不出来就记 0 表示未知。
                 // 写 1 会在「今日接触」这类筛选里变成 1970，写当前时间则是假的上屏时间。
@@ -168,7 +171,7 @@ object Transfer {
                 "words", "word_materials", "messages", "conversations", "learning_actions", "word_workspaces",
                 "oral_recordings", "quiz_attempts", "oral_assessments", "learning_events", "independent_exams",
                 "learner_memory", "ai_usage", "study_plans", "study_items", "study_questions", "study_reviews",
-                "desktop_sources"
+                "desktop_sources", "learner_model", "user_overrides", "study_item_stages", "plan_revisions"
             )) {
                 val rows = JSONArray()
                 db.rawQuery("SELECT * FROM $table", null).use { c ->

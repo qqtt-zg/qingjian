@@ -19,6 +19,28 @@ data class Plan(
     val adjustment: String,
 
     val reflection: String,
+
+    val roundNo: Int = 0,
+
+    val formatVersion: Int = 1,
+
+    val status: String = "READY",
+
+    val plannedCredit: Int = 0,
+
+    val doneCredit: Int = 0,
+
+    val activeMs: Long = 0L,
+
+    val measurementValid: Boolean = false,
+
+    val preferencesRevision: Int = 0,
+
+    val ruleVersion: Int = 1,
+
+    val planRevisionNo: Int = 0,
+
+    val budgetSnapshot: String = "{}",
 ) {
     private val adjustmentData get() = runCatching {org.json.JSONObject(adjustment)}.getOrElse {org.json.JSONObject().put("reason",adjustment)}
     val adjustmentReason get() = adjustmentData.optString("reason")

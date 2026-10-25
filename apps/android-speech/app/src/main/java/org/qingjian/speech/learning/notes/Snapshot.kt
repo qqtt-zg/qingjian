@@ -2,6 +2,6 @@
 package org.qingjian.speech.learning.notes
 
 data class Snapshot(val id: Long, val english: String, val meaning: String, val revision: Long,
-    val materials: String = "", val legacy: String = "") {
+    val materials: String = "", val legacy: String = "", val glossOrigin: String = "unknown") {
     fun content(): org.json.JSONObject? = (materials.ifBlank {legacy}).takeIf {it.isNotEmpty()}?.let {org.json.JSONObject(it)}
 }

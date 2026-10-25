@@ -17,6 +17,10 @@ class StudyViews(private val activity: Activity, private val plans: PlanStore, p
     private fun ask(body: LinearLayout,id: Long) {body.addView(ui.button("没太明白，问问老师") {action("ask",id.toString())})}
 
     fun show(p: Plan,body: LinearLayout,foot: LinearLayout,revealed: Boolean) {
+        if (p.formatVersion >= 2) {
+            showV2(p, body, foot, revealed)
+            return
+        }
         val items=plans.items(p.id)
         when(p.phase) {
             "LEARN" -> {
@@ -133,5 +137,139 @@ class StudyViews(private val activity: Activity, private val plans: PlanStore, p
         } }
         items.filter {it.rating=="again"}.takeIf {it.isNotEmpty()}?.let {body.addView(ui.text("自评还需巩固：${it.joinToString("、") {w->w.english}}",14f,true))}
         if(showAnswers)body.addView(speech.label())
+    }
+
+    private fun showV2(p: Plan, body: LinearLayout, foot: LinearLayout, revealed: Boolean) {
+        val stages = plans.stages(p.id)
+        val pendingStage = stages.firstOrNull { it.status == "pending" }
+        val items = plans.items(p.id)
+
+        if (pendingStage == null || p.status in listOf("DONE", "ABANDONED")) {
+            val doneCount = stages.count { it.status == "done" }
+            body.addView(ui.title(if (p.status == "ABANDONED") "本轮已结束" else "今日学习已完成"))
+            ui.card(body) { card ->
+                card.background = ui.shape(ui.color(R.color.chip_background), 20)
+                val rate = if (p.plannedCredit > 0) "${(p.doneCredit * 100 / p.plannedCredit)}%" else "100%"
+                val values = listOf(
+                    "${p.doneCredit} / ${p.plannedCredit}" to "获得积分",
+                    "$doneCount / ${stages.size}" to "完成环节",
+                    rate to "完成率",
+                    "${p.activeMs / 1000} 秒" to "学习用时"
+                )
+                for (pair in values.chunked(2)) card.addView(ui.row().apply {
+                    pair.forEach { (value, label) ->
+                        addView(ui.column().apply {
+                            addView(ui.word(value).apply { textSize = 26f })
+                            addView(ui.caption(label))
+                        }, LinearLayout.LayoutParams(0, -2, 1f))
+                    }
+                })
+            }
+            body.addView(ui.caption("已完成 ${items.size} 个词汇的针对性环节。"))
+            items.forEach { item ->
+                ui.card(body) { card ->
+                    card.addView(ui.title(item.english))
+                    card.addView(ui.text(item.meaning, 15f))
+                    if (item.reasonText.isNotBlank()) card.addView(ui.caption(item.reasonText))
+                    card.addView(speech.button("done:${item.id}", item.english))
+                }
+            }
+            button(foot, "完成并返回", "v2_finish")
+            return
+        }
+
+        val item = items.firstOrNull { it.id == pendingStage.itemId } ?: return
+        val pos = pendingStage.position + 1
+        val total = stages.size
+
+        val stageLabel = when (pendingStage.stageType) {
+            "LEARN" -> "资料学习"
+            "REVIEW" -> "记忆自评"
+            "ORAL" -> "口语跟读"
+            "WEAK_PRACTICE" -> "薄弱突破"
+            "CONSOLIDATE_PRACTICE" -> "保温巩固"
+            else -> "基础练习"
+        }
+
+        body.addView(ui.caption("阶段任务 · 第 $pos / $total 步 · $stageLabel · ${pendingStage.credit} 积分"))
+        if (item.reasonText.isNotBlank()) {
+            body.addView(ui.caption(item.reasonText))
+        }
+
+        when (pendingStage.stageType) {
+            "LEARN" -> {
+                body.addView(ui.word(item.english))
+                body.addView(speech.button("learn:${item.id}", item.english))
+                body.addView(ui.text(item.meaning, 22f))
+                if (item.example.isNotBlank()) {
+                    ui.card(body) { card ->
+                        card.addView(ui.text(item.example, 18f))
+                        if (item.translation.isNotBlank()) card.addView(ui.caption(item.translation))
+                        card.addView(speech.button("learn_ex:${item.id}", item.example))
+                    }
+                }
+                body.addView(speech.label())
+                ask(body, item.wordId)
+                button(foot, "我已阅读，开始下一步", "v2_complete", pendingStage.stageKey)
+            }
+            "REVIEW" -> {
+                body.addView(ui.word(item.english))
+                body.addView(ui.caption("回忆这个词的常用意思，想好后再看笔记"))
+                body.addView(speech.button("rev:${item.id}", item.english))
+                if (!revealed) {
+                    button(foot, "查看答案", "reveal")
+                } else {
+                    body.addView(ui.text(item.meaning, 22f))
+                    if (item.example.isNotBlank()) body.addView(ui.text(item.example, 16f, true))
+                    foot.addView(ui.button("还没想起来") { action("v2_rate_no", pendingStage.stageKey) })
+                    button(foot, "想起来了", "v2_rate_yes", pendingStage.stageKey)
+                }
+            }
+            "ORAL" -> {
+                body.addView(ui.word(item.english))
+                body.addView(ui.caption("口语跟读与自评"))
+                body.addView(ui.text(item.meaning, 18f))
+                body.addView(speech.button("oral:${item.id}", item.english))
+                body.addView(speech.label())
+                button(foot, "跟读完成", "v2_complete", pendingStage.stageKey)
+            }
+            else -> {
+                if (pendingStage.dimension == "spelling") {
+                    body.addView(ui.text("请写出表示「${item.meaning}」的英文：", 18f))
+                    var inputDraft = pendingStage.draft
+                    val draftInput = ui.input("填写英文", pendingStage.draft).apply {
+                        contentDescription = "拼写答案"
+                    }
+                    var isAssisted = pendingStage.assisted
+                    lateinit var hintBtn: android.widget.Button
+                    hintBtn = ui.button(if (isAssisted) "首字母：${item.english.take(1)}..." else "需要一点提示") {
+                        isAssisted = true
+                        hintBtn.text = "首字母：${item.english.take(1)}..."
+                    }
+                    body.addView(draftInput)
+                    body.addView(hintBtn)
+
+                    draftInput.addTextChangedListener(object : TextWatcher {
+                        override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) = Unit
+                        override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {
+                            inputDraft = s?.toString().orEmpty()
+                            plans.saveStageDraft(pendingStage.stageKey, inputDraft)
+                        }
+                        override fun afterTextChanged(s: Editable?) = Unit
+                    })
+
+                    button(foot, "提交答案", "v2_submit_spelling", "${pendingStage.stageKey}:$inputDraft:$isAssisted")
+                } else {
+                    body.addView(ui.text("${item.english} 的常用意思是什么？", 18f))
+                    body.addView(speech.button("meaning_q:${item.id}", item.english))
+                    body.addView(ui.button(item.meaning) {
+                        action("v2_submit_choice", "${pendingStage.stageKey}:true")
+                    })
+                    button(foot, "完成本题", "v2_submit_choice", "${pendingStage.stageKey}:true")
+                }
+            }
+        }
+
+        foot.addView(ui.button("放弃本轮") { action("v2_abandon", p.id.toString()) })
     }
 }

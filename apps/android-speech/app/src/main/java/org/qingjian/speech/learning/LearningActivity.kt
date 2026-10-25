@@ -117,9 +117,9 @@ class LearningActivity : Activity() {
     }
 
     private fun vocabulary() {
-        body.addView(ui.caption("你遇到的词，值得慢慢学会。最近 500 个条目可搜索。"))
+        body.addView(ui.caption("你遇到的词，值得慢慢学会。已支持双源检索。"))
         body.addView(ui.button("添加词汇或短语") { editWord() })
-        val search = ui.input("搜索英文或中文笔记", query)
+        val search = ui.input("搜索英文、中文笔记或词汇表", query)
         body.addView(search)
         val filters = ui.row()
         for(label in listOf("全部", "有笔记", "已自评")) filters.addView(ui.button(label) { filter = label; render() }.apply {
@@ -127,16 +127,63 @@ class LearningActivity : Activity() {
             if(isSelected) background = ui.shape(ui.color(org.qingjian.speech.R.color.chip_background_active), 18)
         }, LinearLayout.LayoutParams(0, -2, 1f).apply { marginEnd = ui.dp(5) })
         body.addView(filters)
+
+        val warningCaption = ui.caption("").apply { visibility = android.view.View.GONE }
+        body.addView(warningCaption)
+
         val list = ui.column(); body.addView(list)
         fun populate() {
             list.removeAllViews()
             val matches = store.words(query).filter { when(filter) { "有笔记" -> it.meaning.isNotBlank(); "已自评" -> it.reviewed > 0; else -> true } }
-            if(matches.isEmpty()) list.addView(ui.text("没有找到词汇", muted = true))
-            matches.forEach { word ->
-                list.addView(ui.wordRow(word.english, word.meaning.ifBlank { "还没有中文笔记" }) { openWord(word) }.apply {
-                    contentDescription = "学习这个词：${word.english}"
-                })
-                ui.divider(list)
+            if(matches.isNotEmpty()) {
+                if (query.isNotBlank()) list.addView(ui.caption("已在词库中 (${matches.size})"))
+                matches.forEach { word ->
+                    list.addView(ui.wordRow(word.english, word.meaning.ifBlank { "还没有中文笔记" }) { openWord(word) }.apply {
+                        contentDescription = "学习这个词：${word.english}"
+                    })
+                    ui.divider(list)
+                }
+            } else if (query.isBlank() || filter != "全部") {
+                list.addView(ui.text("没有找到词汇", muted = true))
+            }
+
+            val trimmed = query.trim()
+            if (trimmed.isNotEmpty() && filter == "全部") {
+                val table = org.qingjian.speech.learning.glossary.GlossaryStore.bundled(this, "en")
+                if (table == null) {
+                    warningCaption.text = "还没下载词汇表，仅展示本地词库结果"
+                    warningCaption.visibility = android.view.View.VISIBLE
+                } else {
+                    warningCaption.visibility = android.view.View.GONE
+                    val lookup = org.qingjian.speech.learning.glossary.GlossaryLookup(
+                        table,
+                        org.qingjian.speech.learning.glossary.GlossaryStore.load(this, "en")
+                    )
+                    val staticResults = lookup.search(trimmed, 15)
+                    val existing = store.allWords().map { org.qingjian.speech.learning.quiz.Question.normalize(it.english) }.toSet()
+                    val unadded = staticResults.filter { org.qingjian.speech.learning.quiz.Question.normalize(it.second.text) !in existing }
+                    if (unadded.isNotEmpty()) {
+                        list.addView(ui.caption("词汇表推荐（未添加）"))
+                        for ((chineseKey, sense) in unadded) {
+                            val pos = sense.partOfSpeech?.let { "[$it] " }.orEmpty()
+                            ui.card(list) { card ->
+                                card.addView(ui.title(sense.text))
+                                card.addView(ui.text("$pos$chineseKey", 14f))
+                                card.addView(ui.button("加入词库") {
+                                    val newId = store.addWord(sense.text, "static-table")
+                                    store.setMeaning(newId, "$pos$chineseKey".trim())
+                                    android.widget.Toast.makeText(this@LearningActivity, "已加入词库: ${sense.text}", android.widget.Toast.LENGTH_SHORT).show()
+                                    populate()
+                                })
+                            }
+                            ui.divider(list)
+                        }
+                    } else if (matches.isEmpty()) {
+                        list.addView(ui.text("没有找到词汇", muted = true))
+                    }
+                }
+            } else {
+                warningCaption.visibility = android.view.View.GONE
             }
         }
         search.addTextChangedListener(object : TextWatcher {

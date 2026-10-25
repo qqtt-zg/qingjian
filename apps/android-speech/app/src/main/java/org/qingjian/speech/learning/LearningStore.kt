@@ -9,9 +9,9 @@ import java.util.Locale
 import org.qingjian.speech.learning.practice.PracticeStore
 import org.qingjian.speech.learning.oral.AudioFiles
 
-class LearningStore private constructor(private val app: Context) : SQLiteOpenHelper(app, "learning.db", null, 10) {
+class LearningStore private constructor(private val app: Context) : SQLiteOpenHelper(app, "learning.db", null, 12) {
     override fun onCreate(db: SQLiteDatabase) {
-        db.execSQL("CREATE TABLE words (id INTEGER PRIMARY KEY AUTOINCREMENT, lookup TEXT NOT NULL UNIQUE, english TEXT NOT NULL, meaning TEXT NOT NULL DEFAULT '', received INTEGER NOT NULL DEFAULT 0, played INTEGER NOT NULL DEFAULT 0, reviewed INTEGER NOT NULL DEFAULT 0, last_seen INTEGER NOT NULL)")
+        db.execSQL("CREATE TABLE words (id INTEGER PRIMARY KEY AUTOINCREMENT, lookup TEXT NOT NULL UNIQUE, english TEXT NOT NULL, meaning TEXT NOT NULL DEFAULT '', gloss_origin TEXT NOT NULL DEFAULT 'unknown', received INTEGER NOT NULL DEFAULT 0, played INTEGER NOT NULL DEFAULT 0, reviewed INTEGER NOT NULL DEFAULT 0, last_seen INTEGER NOT NULL, note_revision INTEGER NOT NULL DEFAULT 0)")
         org.qingjian.speech.learning.notes.Store.createRevision(db)
         org.qingjian.speech.learning.notes.Store.createMaterials(db)
         db.execSQL("CREATE TABLE messages (id INTEGER PRIMARY KEY AUTOINCREMENT, topic TEXT NOT NULL, role TEXT NOT NULL, body TEXT NOT NULL, state TEXT NOT NULL, reply_to INTEGER)")
@@ -23,6 +23,10 @@ class LearningStore private constructor(private val app: Context) : SQLiteOpenHe
         org.qingjian.speech.learning.daily.PlanStore.createTables(db)
         org.qingjian.speech.learning.assessment.Store.createTables(db)
         org.qingjian.speech.learning.archive.Store.create(db)
+        db.execSQL("CREATE TABLE IF NOT EXISTS learner_model (word_id INTEGER NOT NULL, dimension TEXT NOT NULL, state TEXT NOT NULL, attempts INTEGER NOT NULL DEFAULT 0, correct INTEGER NOT NULL DEFAULT 0, assisted INTEGER NOT NULL DEFAULT 0, independent_attempts INTEGER NOT NULL DEFAULT 0, independent_correct INTEGER NOT NULL DEFAULT 0, streak INTEGER NOT NULL DEFAULT 0, last_success_day TEXT, last_at INTEGER, next_due INTEGER, score REAL, origin TEXT NOT NULL, rule_version INTEGER NOT NULL, PRIMARY KEY (word_id, dimension))")
+        db.execSQL("CREATE INDEX IF NOT EXISTS learner_due ON learner_model(next_due, state)")
+        db.execSQL("CREATE TABLE IF NOT EXISTS user_overrides (word_id INTEGER NOT NULL, dimension TEXT NOT NULL, override_type TEXT NOT NULL, created_at INTEGER NOT NULL, valid_until INTEGER NOT NULL, active INTEGER NOT NULL DEFAULT 1, release_reason TEXT, released_at INTEGER, PRIMARY KEY (word_id, dimension))")
+        db.execSQL("CREATE INDEX IF NOT EXISTS user_overrides_active ON user_overrides(active, valid_until)")
     }
 
     override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) {
@@ -66,6 +70,41 @@ class LearningStore private constructor(private val app: Context) : SQLiteOpenHe
             org.qingjian.speech.learning.assessment.Store.createTables(db)
         }
         if(oldVersion<10)org.qingjian.speech.learning.archive.Store.migrateAssessments(db)
+        if(oldVersion < 11) {
+            db.execSQL("CREATE TABLE IF NOT EXISTS learner_model (word_id INTEGER NOT NULL, dimension TEXT NOT NULL, state TEXT NOT NULL, attempts INTEGER NOT NULL DEFAULT 0, correct INTEGER NOT NULL DEFAULT 0, assisted INTEGER NOT NULL DEFAULT 0, independent_attempts INTEGER NOT NULL DEFAULT 0, independent_correct INTEGER NOT NULL DEFAULT 0, streak INTEGER NOT NULL DEFAULT 0, last_success_day TEXT, last_at INTEGER, next_due INTEGER, score REAL, origin TEXT NOT NULL, rule_version INTEGER NOT NULL, PRIMARY KEY (word_id, dimension))")
+            db.execSQL("CREATE INDEX IF NOT EXISTS learner_due ON learner_model(next_due, state)")
+            db.execSQL("CREATE TABLE IF NOT EXISTS user_overrides (word_id INTEGER NOT NULL, dimension TEXT NOT NULL, override_type TEXT NOT NULL, created_at INTEGER NOT NULL, valid_until INTEGER NOT NULL, active INTEGER NOT NULL DEFAULT 1, release_reason TEXT, released_at INTEGER, PRIMARY KEY (word_id, dimension))")
+            db.execSQL("CREATE INDEX IF NOT EXISTS user_overrides_active ON user_overrides(active, valid_until)")
+
+            // 重构 study_plans：移除 day UNIQUE，支持 (day, round_no) 唯一
+            db.execSQL("CREATE TABLE study_plans_v11 (id INTEGER PRIMARY KEY AUTOINCREMENT, day TEXT NOT NULL, round_no INTEGER NOT NULL DEFAULT 0, format_version INTEGER NOT NULL DEFAULT 1, status TEXT NOT NULL DEFAULT 'READY', title TEXT NOT NULL, reason TEXT NOT NULL, phase TEXT NOT NULL DEFAULT 'LEARN', cursor INTEGER NOT NULL DEFAULT 0, revision INTEGER NOT NULL DEFAULT 0, adjustment TEXT NOT NULL DEFAULT '', reflection TEXT NOT NULL DEFAULT '', planned_credit INTEGER NOT NULL DEFAULT 0, done_credit INTEGER NOT NULL DEFAULT 0, active_ms INTEGER NOT NULL DEFAULT 0, measurement_valid INTEGER NOT NULL DEFAULT 0, preferences_revision INTEGER NOT NULL DEFAULT 0, rule_version INTEGER NOT NULL DEFAULT 1, plan_revision_no INTEGER NOT NULL DEFAULT 0, budget_snapshot TEXT NOT NULL DEFAULT '{}', updated INTEGER NOT NULL, UNIQUE(day, round_no))")
+            db.execSQL("INSERT INTO study_plans_v11 (id, day, round_no, format_version, status, title, reason, phase, cursor, revision, adjustment, reflection, updated) SELECT id, day, 0, 1, (CASE WHEN phase = 'DONE' THEN 'DONE' ELSE 'PAUSED' END), title, reason, phase, cursor, revision, adjustment, reflection, updated FROM study_plans")
+            db.execSQL("DROP TABLE study_plans")
+            db.execSQL("ALTER TABLE study_plans_v11 RENAME TO study_plans")
+            db.execSQL("CREATE INDEX study_plans_day_round ON study_plans(day, round_no)")
+            db.execSQL("CREATE INDEX study_plans_status ON study_plans(status, format_version)")
+
+            // 扩充 study_items 字段
+            val itemCols = db.rawQuery("PRAGMA table_info(study_items)", null).use { c -> buildSet { while(c.moveToNext()) add(c.getString(1)) } }
+            if("reason_code" !in itemCols) db.execSQL("ALTER TABLE study_items ADD COLUMN reason_code TEXT NOT NULL DEFAULT ''")
+            if("reason_text" !in itemCols) db.execSQL("ALTER TABLE study_items ADD COLUMN reason_text TEXT NOT NULL DEFAULT ''")
+            if("item_key" !in itemCols) db.execSQL("ALTER TABLE study_items ADD COLUMN item_key TEXT NOT NULL DEFAULT ''")
+
+            // 创建 study_item_stages 与 plan_revisions
+            db.execSQL("CREATE TABLE IF NOT EXISTS study_item_stages (stage_key TEXT PRIMARY KEY, plan_id INTEGER NOT NULL, item_id INTEGER NOT NULL, word_id INTEGER NOT NULL, position INTEGER NOT NULL, dimension TEXT NOT NULL, stage_type TEXT NOT NULL, snapshot TEXT NOT NULL DEFAULT '', credit INTEGER NOT NULL DEFAULT 1, status TEXT NOT NULL DEFAULT 'pending', draft TEXT NOT NULL DEFAULT '', assisted INTEGER NOT NULL DEFAULT 0, result_event_key TEXT, active_ms INTEGER NOT NULL DEFAULT 0, measurement_valid INTEGER NOT NULL DEFAULT 1, updated INTEGER NOT NULL)")
+            db.execSQL("CREATE INDEX IF NOT EXISTS stages_plan_pos ON study_item_stages(plan_id, position)")
+            db.execSQL("CREATE INDEX IF NOT EXISTS stages_word ON study_item_stages(word_id)")
+
+            db.execSQL("CREATE TABLE IF NOT EXISTS plan_revisions (id INTEGER PRIMARY KEY AUTOINCREMENT, plan_id INTEGER NOT NULL, revision_no INTEGER NOT NULL, action TEXT NOT NULL, before_snapshot TEXT NOT NULL DEFAULT '', after_snapshot TEXT NOT NULL DEFAULT '', user_constraints TEXT NOT NULL DEFAULT '', reason TEXT NOT NULL DEFAULT '', created INTEGER NOT NULL, UNIQUE(plan_id, revision_no))")
+            db.execSQL("CREATE INDEX IF NOT EXISTS plan_revisions_plan ON plan_revisions(plan_id, revision_no)")
+        }
+        if(oldVersion < 12) {
+            val columns = db.rawQuery("PRAGMA table_info(words)", null).use { c -> buildSet { while(c.moveToNext()) add(c.getString(1)) } }
+            if("gloss_origin" !in columns) {
+                db.execSQL("ALTER TABLE words ADD COLUMN gloss_origin TEXT NOT NULL DEFAULT 'unknown'")
+                db.execSQL("UPDATE words SET gloss_origin='desktop-vocab' WHERE id IN (SELECT word_id FROM desktop_sources)")
+            }
+        }
     }
 
     fun record(text: String, completed: Boolean = false) {
@@ -88,15 +127,15 @@ class LearningStore private constructor(private val app: Context) : SQLiteOpenHe
     fun words(query: String = ""): List<VocabularyEntry> {
         val result = mutableListOf<VocabularyEntry>()
         // instr 将搜索内容按普通文字匹配，百分号和下划线不会成为通配符。
-        readableDatabase.rawQuery("SELECT id, english, meaning, received, played, reviewed, last_seen FROM words WHERE instr(lower(english), lower(?))>0 OR instr(meaning, ?)>0 ORDER BY last_seen DESC LIMIT 500", arrayOf(query, query)).use { c ->
-            while (c.moveToNext()) result += VocabularyEntry(c.getLong(0), c.getString(1), c.getString(2), c.getInt(3), c.getInt(4), c.getInt(5), c.getLong(6))
+        readableDatabase.rawQuery("SELECT id, english, meaning, received, played, reviewed, last_seen, gloss_origin FROM words WHERE instr(lower(english), lower(?))>0 OR instr(meaning, ?)>0 ORDER BY last_seen DESC LIMIT 500", arrayOf(query, query)).use { c ->
+            while (c.moveToNext()) result += VocabularyEntry(c.getLong(0), c.getString(1), c.getString(2), c.getInt(3), c.getInt(4), c.getInt(5), c.getLong(6), c.getString(7))
         }
         return result
     }
-    fun allWords():List<VocabularyEntry> = readableDatabase.rawQuery("SELECT id,english,meaning,received,played,reviewed,last_seen FROM words ORDER BY last_seen DESC,id DESC",null).use {c->buildList {while(c.moveToNext())add(VocabularyEntry(c.getLong(0),c.getString(1),c.getString(2),c.getInt(3),c.getInt(4),c.getInt(5),c.getLong(6)))}}
+    fun allWords():List<VocabularyEntry> = readableDatabase.rawQuery("SELECT id,english,meaning,received,played,reviewed,last_seen,gloss_origin FROM words ORDER BY last_seen DESC,id DESC",null).use {c->buildList {while(c.moveToNext())add(VocabularyEntry(c.getLong(0),c.getString(1),c.getString(2),c.getInt(3),c.getInt(4),c.getInt(5),c.getLong(6),c.getString(7)))}}
 
-    fun word(id: Long): VocabularyEntry? = readableDatabase.rawQuery("SELECT id, english, meaning, received, played, reviewed, last_seen FROM words WHERE id=?", arrayOf(id.toString())).use { c ->
-        if (c.moveToFirst()) VocabularyEntry(c.getLong(0), c.getString(1), c.getString(2), c.getInt(3), c.getInt(4), c.getInt(5), c.getLong(6)) else null
+    fun word(id: Long): VocabularyEntry? = readableDatabase.rawQuery("SELECT id, english, meaning, received, played, reviewed, last_seen, gloss_origin FROM words WHERE id=?", arrayOf(id.toString())).use { c ->
+        if (c.moveToFirst()) VocabularyEntry(c.getLong(0), c.getString(1), c.getString(2), c.getInt(3), c.getInt(4), c.getInt(5), c.getLong(6), c.getString(7)) else null
     }
 
     fun setMeaning(id: Long, meaning: String) {
@@ -104,12 +143,19 @@ class LearningStore private constructor(private val app: Context) : SQLiteOpenHe
         writableDatabase.update("words", ContentValues().apply { put("meaning", meaning.trim()) }, "id=?", arrayOf(id.toString()))
     }
 
-    fun addWord(text: String): Long {
+    fun setGlossOrigin(id: Long, origin: String) {
+        require(origin in listOf("desktop-vocab", "static-table", "ai", "unknown"))
+        writableDatabase.update("words", ContentValues().apply { put("gloss_origin", origin) }, "id=?", arrayOf(id.toString()))
+    }
+
+    fun addWord(text: String, origin: String = "unknown"): Long {
         val word = text.trim().replace(Regex("\\s+"), " ")
         require(word.isNotBlank() && word.length <= 500)
+        require(origin in listOf("desktop-vocab", "static-table", "ai", "unknown"))
         val key = word.lowercase(Locale.ROOT)
         writableDatabase.insertWithOnConflict("words", null, ContentValues().apply {
             put("lookup", key); put("english", word); put("last_seen", System.currentTimeMillis())
+            put("gloss_origin", origin)
         }, SQLiteDatabase.CONFLICT_IGNORE)
         return readableDatabase.rawQuery("SELECT id FROM words WHERE lookup=?", arrayOf(key)).use { c -> check(c.moveToFirst()); c.getLong(0) }
     }
@@ -170,10 +216,11 @@ class LearningStore private constructor(private val app: Context) : SQLiteOpenHe
         val db = writableDatabase
         db.beginTransaction()
         try {
-            for(table in listOf("learning_events","independent_exams","learner_memory","ai_usage","history_analysis","desktop_sources"))db.delete(table,null,null)
+            for(table in listOf("learning_events","independent_exams","learner_memory","ai_usage","history_analysis","desktop_sources","learner_model","user_overrides"))db.delete(table,null,null)
             db.execSQL("UPDATE archive_meta SET revision=revision+1 WHERE id=1")
             db.delete("word_materials", null, null)
             db.delete("oral_assessments",null,null);db.delete("word_workspaces",null,null)
+            db.delete("study_item_stages", null, null); db.delete("plan_revisions", null, null)
             db.delete("study_questions", null, null); db.delete("study_items", null, null)
             db.delete("study_plans", null, null); db.delete("study_reviews", null, null)
             db.execSQL("UPDATE study_meta SET epoch=epoch+1 WHERE id=1")

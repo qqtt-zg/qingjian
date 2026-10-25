@@ -12,8 +12,8 @@ class Store(context: Context) {
 
     fun snapshot(id: Long): Snapshot? {
         val db=book.readableDatabase
-        val base=db.rawQuery("SELECT english,meaning,note_revision FROM words WHERE id=?",arrayOf(id.toString())).use { c ->
-            if(c.moveToFirst()) Snapshot(id,c.getString(0),c.getString(1),c.getLong(2)) else null
+        val base=db.rawQuery("SELECT english,meaning,note_revision,gloss_origin FROM words WHERE id=?",arrayOf(id.toString())).use { c ->
+            if(c.moveToFirst()) Snapshot(id,c.getString(0),c.getString(1),c.getLong(2), glossOrigin = c.getString(3)) else null
         } ?: return null
         val materials=db.rawQuery("SELECT payload FROM word_materials WHERE word_id=?",arrayOf(id.toString())).use {if(it.moveToFirst())it.getString(0) else ""}
         val legacy=db.rawQuery("SELECT payload FROM learning_actions WHERE word_id=? AND kind='prepare_word_card' AND state='applied' ORDER BY id DESC LIMIT 1",arrayOf(id.toString())).use {if(it.moveToFirst())it.getString(0) else ""}

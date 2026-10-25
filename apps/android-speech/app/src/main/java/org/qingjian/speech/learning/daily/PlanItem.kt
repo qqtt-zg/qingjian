@@ -19,4 +19,10 @@ data class PlanItem(
     val learned: Boolean,
 
     val rating: String,
+
+    val reasonCode: String = "",
+
+    val reasonText: String = "",
+
+    val itemKey: String = "",
 )

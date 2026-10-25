@@ -1,4 +1,4 @@
-//! 仅用于隔离模拟器：验证 v1～v8 升级到 v9 保留词汇、笔记、旧录音与会话目录。
+//! 仅用于隔离模拟器：验证 v1～v11 升级到 v12 保留词汇、笔记、旧录音与会话目录，并就绪模型投影表与来源。
 package org.qingjian.speech
 
 import android.app.Instrumentation
@@ -10,11 +10,11 @@ import org.qingjian.speech.learning.quiz.Kind
 object MigrationProbe {
     fun run(test: Instrumentation): String {
         val app = test.targetContext
-        for(version in 1..9) {
+        for(version in 1..11) {
             app.deleteDatabase("learning.db")
             val path = app.getDatabasePath("learning.db"); path.parentFile!!.mkdirs()
             SQLiteDatabase.openOrCreateDatabase(path, null).use { db ->
-                db.execSQL("CREATE TABLE words (id INTEGER PRIMARY KEY ${if(version>=5) "AUTOINCREMENT" else ""}, lookup TEXT NOT NULL UNIQUE, english TEXT NOT NULL, meaning TEXT NOT NULL DEFAULT '', received INTEGER NOT NULL DEFAULT 0, played INTEGER NOT NULL DEFAULT 0, reviewed INTEGER NOT NULL DEFAULT 0, last_seen INTEGER NOT NULL)")
+                db.execSQL("CREATE TABLE words (id INTEGER PRIMARY KEY ${if(version>=5) "AUTOINCREMENT" else ""}, lookup TEXT NOT NULL UNIQUE, english TEXT NOT NULL, meaning TEXT NOT NULL DEFAULT '' ${if(version>=12) ", gloss_origin TEXT NOT NULL DEFAULT 'unknown'" else ""}, received INTEGER NOT NULL DEFAULT 0, played INTEGER NOT NULL DEFAULT 0, reviewed INTEGER NOT NULL DEFAULT 0, last_seen INTEGER NOT NULL)")
                 db.execSQL("CREATE TABLE messages (id INTEGER PRIMARY KEY ${if(version >= 3) "AUTOINCREMENT" else ""}, topic TEXT NOT NULL, role TEXT NOT NULL, body TEXT NOT NULL, state TEXT NOT NULL ${if(version >= 4) ",reply_to INTEGER" else ""})")
                 db.execSQL("CREATE INDEX messages_topic ON messages(topic,id)")
                 db.execSQL("INSERT INTO words VALUES(1,'control','Control','控制',7,4,2,100)")
@@ -38,13 +38,14 @@ object MigrationProbe {
                     db.execSQL("UPDATE words SET note_revision=3 WHERE id=1")
                 }
                 if(version>=9)org.qingjian.speech.learning.assessment.Store.createTables(db)
+                if(version>=10)org.qingjian.speech.learning.archive.Store.create(db)
                 db.version = version
                 if(version>=8)org.qingjian.speech.learning.notes.Store.createMaterials(db)
             }
             val prefs = app.getSharedPreferences("speech", 0)
             prefs.edit().putInt("voice", 7).putInt("rate_percent", 125).commit()
             val store = LearningStore.get(app)
-            check(store.readableDatabase.version == 10)
+            check(store.readableDatabase.version == 12)
             if(version>=2)check(PracticeStore(app).recordings(1).single().let {it.reference=="Control" && it.mode=="word" && it.rating=="again"})
             check(org.qingjian.speech.learning.assessment.Store(app).facts().getJSONArray("recent_assessments").length()==0)
             val notes=org.qingjian.speech.learning.notes.Store(app)
@@ -57,6 +58,7 @@ object MigrationProbe {
             check(org.qingjian.speech.learning.daily.PlanStore(app).current()==null)
             val word = checkNotNull(store.word(1))
             check(word.english == "Control" && word.meaning == "控制" && word.received == 7 && word.played == 4 && word.reviewed == 2)
+            check(word.glossOrigin == "unknown")
             check(store.messages("word:1").single().text == "旧版已保存的解释")
             check(PracticeStore(app).summary(Kind.CHOICE).first == if(version >= 2) 1 else 0)
             check(prefs.getInt("voice", -1) == 7 && prefs.getInt("rate_percent", -1) == 125)
@@ -71,6 +73,6 @@ object MigrationProbe {
             check(store.addWord("new-word") > deletedWord)
             store.close()
         }
-        return "PASS schema v1-v9 to v10: words/notes/counters/chats/preferences/quiz retained, legacy recording reference/mode backfilled without fabricated assessments, material table and note revision retained, monotonic IDs"
+        return "PASS schema v1-v11 to v12: words/notes/counters/chats/preferences/quiz retained, legacy recording reference/mode backfilled without fabricated assessments, material table and note revision retained, monotonic IDs, v12 gloss_origin ready"
     }
 }

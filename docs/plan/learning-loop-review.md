@@ -15,8 +15,8 @@
 | 阶段 | 勾选 | 实际 | 说明 |
 | --- | --- | --- | --- |
 | 0A 修复来源 | 6 / 9 | 3 完整 + 3 部分 | 日期解析、读干净请求体完整；context 接口、个人释义表、`.qj` 只读器、JVM 测试层有缺口 |
-| 0B 事件与投影 | 0 / 3 | 0 | `EventReader`、`learner_model`、v11 迁移均无 |
-| 1 本机今日计划 | 0 / 8 | 0 | `Pack.kt`、`PlanBuilder`、`gloss_origin` 均无 |
+| 0B 事件与投影 | 3 / 3 | 3 完整 | `EventReader`、`learner_model`、纯函数排程、读时衰减、v11 迁移及 71 项 JVM 测试全部完成 |
+| 1 本机今日计划 | 8 / 8 | 8 完整 | `ContextPack`、`PlanBuilder`、`PlanConstraints`、`gloss_origin`、双源双向查词、防篡改、93 项测试全绿 |
 | 2 模型修订 | 0 / 3 | 0 | 无 |
 | 3 应用聚合 | 0 / 3 | 0 | 无 |
 

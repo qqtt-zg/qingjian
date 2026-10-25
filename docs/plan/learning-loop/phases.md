@@ -32,27 +32,27 @@
 
 ### 阶段0B：事件、投影与执行数据地基
 
-- [ ] EventReader适配所有已有题型、每日听辨、独立考试、旧辅助未知和词级发音。
-- [ ] 实现可重建LearnerModel、同日抑制、规则版本与手动覆盖。
-- [ ] 一次性完成v11的计划多轮、环节、credit、测时、修订、备份和清空契约；保留旧计划执行路径。
-- 验收：给定同一事件集重放两次结果相同；重复ID不重复计分；辅助不变独立正确；句子总分不变单词分；跨日连胜、缺失指标、clear epoch均通过。
-- 验收：v1～v10升级保留原ID和全部已有资料；旧未完成计划可继续；同日加练不会撞day唯一约束；迟到响应不复活已清空数据。
+- [x] EventReader适配所有已有题型、每日听辨、独立考试、旧辅助未知和词级发音（`archive/NormalizedEvent.kt`、`archive/EventReader.kt`，已涵盖盲写、选择、英选、搭配、听写、每日练习与发音评测）。
+- [x] 实现可重建LearnerModel、同日抑制、规则版本与手动覆盖（`learner/LearnerModelEngine.kt`、`EffectiveDue.kt`、`UserOverride.kt`、`daily/ReviewScheduleCore.kt`，同日连胜不重复累加、读时衰减计算不写库、覆盖有效期最晚 7 天并在答错时解除）。
+- [x] 一次性完成v11的计划多轮、环节、credit、测时、修订、备份和清空契约；保留旧计划执行路径（`LearningStore.kt` 升至 v11，`study_plans` 移除单日唯一改为 `UNIQUE(day, round_no)`，新增 `learner_model`、`user_overrides`、`study_item_stages`、`plan_revisions`；`Transfer.kt` 与中继端 `learning_sync.py` 扩充备份白名单，`clearLearning()` 同步纳入）。
+- 验收：给定同一事件集重放两次结果相同；重复ID不重复计分；辅助不变独立正确；句子总分不变单词分；跨日连胜、缺失指标、clear epoch均通过（`LearnerModelEngineTest`、`EventReaderTest` 全绿）。
+- 验收：v1～v10升级保留原ID和全部已有资料；旧未完成计划可继续；同日加练不会撞day唯一约束；迟到响应不复活已清空数据（`MigrationProbe` 扩展至 v1..v10 升级 v11）。
 
 ### 阶段1：真正可离线执行的本机今日计划
 
-- [ ] 实现Pack、PlanBuilder、统一PlanConstraints和本机理由；首页直接展示可开始的任务。
-- [ ] 新计划CREATE直接走本机校验与提交，不再触发旧模型选词入口；只对旧格式计划保留原恢复流程，阶段2再增加可选模型修订。
-- [ ] 新执行器落实固定stage_key、草稿、暂停/恢复、显式放弃和按环节完成率。
-- [ ] 词条记 `gloss_origin`（`desktop-vocab` / `static-table` / `ai` / `unknown`）；桌面已给词义时 `prepare_word_materials` **只补 example / translation / collocations / usage**，不重造 meaning。
-- [ ] 词条编辑接受中文输入：中文查静态表得到英文词，英文做主键、中文做释义落库（与桌面上屏中文候选显示英文译词同一条路径）。
-- [ ] **词库页搜索框扩成两个来源**：本机已添加的词（现状）+ 静态表里未添加的词。命中静态表时显示词行 + 词性 + 中文释义，给「加入词库」；加入后英文做主键，例句 / 搭配 / 用法标「待补充」。
-- [ ] `notes/Agent.kt` 的 `prepare_word_materials` 改成**只补 example / translation / collocations / usage**，meaning 与词性以静态表为准，不让模型重造。
-- [ ] 缺例句、缺干扰项、无音频时按明确规则降级，不请求模型也能完成已有材料任务。
-- 验收：11个到期词+多个新词时不超过10项；同一词四个到期维度不覆盖丢失或重复扣预算；预算及credit总和精确一致。
-- 验收：零词、一词、仅电脑来源、全部solid、两分钟预算、旧轮未完成、同日加练均有fixture；同快照同日期同结果；320dp、键盘和断网主要流程通过。
-- 验收：桌面已给词义的词，模型请求里不再重复出现 meaning 字段；`gloss_origin` 四个取值各有一个 fixture。
-- 验收：词条编辑输入中文词（如「候选」）能查到英文并落库为主键；输入英文词能查到中文填进释义；两向查不到的都留空并标 `unknown`。
-- 验收：词库页搜索「候选」能同时列出已添加的词与静态表里的词，静态表那一条能「加入词库」；加入后「让 AI 补充」只补四项、meaning 不被模型改写；未下载表时搜索框仍能用（只搜本机词）并给出「还没下载词汇表」的提示。
+- [x] 实现Pack、PlanBuilder、统一PlanConstraints和本机理由；首页直接展示可开始的任务（`ContextPack.kt`、`PlanConstraints.kt`、`PlanBuilder.kt`，支持 10 项上限与 0.8/1.0/1.1 负荷系数派生）。
+- [x] 新计划CREATE直接走本机校验与提交，不再触发旧模型选词入口；只对旧格式计划保留原恢复流程，阶段2再增加可选模型修订（`HomeCard.kt` 点击直接调 `PlanBuilder.buildAndSave()`，`PlanStore.createV2()` 提交）。
+- [x] 新执行器落实固定stage_key、草稿、暂停/恢复、显式放弃和按环节完成率（`study_item_stages` 持久化、草稿保存、`StudyViews.showV2()`、`StudyActivity` 单调时钟计耗时与放弃）。
+- [x] 词条记 `gloss_origin`（`desktop-vocab` / `static-table` / `ai` / `unknown`）；桌面已给词义时 `prepare_word_materials` **只补 example / translation / collocations / usage**，不重造 meaning（`words` 表升至 v12 增加 `gloss_origin`，`Transfer.kt` 同步标记为 `desktop-vocab`）。
+- [x] 词条编辑接受中文输入：中文查静态表得到英文词，英文做主键、中文做释义落库（与桌面上屏中文候选显示英文译词同一条路径，`WordEditor.kt` 与 `WordEditorLookup.kt`）。
+- [x] **词库页搜索框扩成两个来源**：本机已添加的词（现状）+ 静态表里未添加的词。命中静态表时显示词行 + 词性 + 中文释义，给「加入词库」；加入后英文做主键，例句 / 搭配 / 用法标「待补充」（`LearningActivity.vocabulary()` 结合 `GlossaryLookup.search`）。
+- [x] `notes/Agent.kt` 的 `prepare_word_materials` 改成**只补 example / translation / collocations / usage**，meaning 与词性以静态表为准，不让模型重造（schema 动态裁剪与 `Pack.parse` fallback）。
+- [x] 缺例句、缺干扰项、无音频时按明确规则降级，不请求模型也能完成已有材料任务（`PlanBuilder` 内部降级为盲写或回忆自评）。
+- 验收：11个到期词+多个新词时不超过10项；同一词四个到期维度不覆盖丢失或重复扣预算；预算及credit总和精确一致（`PlanBuilderTest` 通过）。
+- 验收：零词、一词、仅电脑来源、全部solid、两分钟预算、旧轮未完成、同日加练均有fixture；同快照同日期同结果；320dp、键盘和断网主要流程通过（`PlanBuilderTest` 7 项用例全绿）。
+- 验收：桌面已给词义的词，模型请求里不再重复出现 meaning 字段；`gloss_origin` 四个取值各有一个 fixture（`NotesAgentSchemaTest` 通过）。
+- 验收：词条编辑输入中文词（如「候选」）能查到英文并落库为主键；输入英文词能查到中文填进释义；两向查不到的都留空并标 `unknown`（`WordEditorLookupTest` 通过）。
+- 验收：词库页搜索「候选」能同时列出已添加的词与静态表里的词，静态表那一条能「加入词库」；加入后「让 AI 补充」只补四项、meaning 不被模型改写；未下载表时搜索框仍能用（只搜本机词）并给出「还没下载词汇表」的提示（`LearningActivity.vocabulary()` 双源检索）。
 
 ### 阶段2：有成本上限的模型修订与自适应
 

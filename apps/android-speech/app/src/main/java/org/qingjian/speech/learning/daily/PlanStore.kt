@@ -17,19 +17,61 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 
+data class StageRecord(
+    val stageKey: String,
+    val planId: Long,
+    val itemId: Long,
+    val wordId: Long,
+    val position: Int,
+    val dimension: String,
+    val stageType: String,
+    val snapshot: String,
+    val credit: Int,
+    val status: String,
+    val draft: String,
+    val assisted: Boolean,
+    val resultEventKey: String?,
+    val activeMs: Long,
+    val measurementValid: Boolean,
+    val updated: Long
+)
+
 class PlanStore(private val app: Context) {
     private val store = LearningStore.get(app)
     private val db get() = store.writableDatabase
-    private val columns = "id,day,title,reason,phase,cursor,revision,adjustment,reflection"
+    private val columns = "id,day,title,reason,phase,cursor,revision,adjustment,reflection,round_no,format_version,status,planned_credit,done_credit,active_ms,measurement_valid,preferences_revision,rule_version,plan_revision_no,budget_snapshot"
 
-    fun current(): Plan? = query("phase!='DONE' ORDER BY id DESC LIMIT 1") ?: query("day=? ORDER BY id DESC LIMIT 1", arrayOf(today()))
+    fun current(): Plan? = query(
+        "((format_version=1 AND phase!='DONE') OR (format_version>=2 AND status IN ('READY','RUNNING','PAUSED'))) ORDER BY id DESC LIMIT 1"
+    ) ?: query("day=? ORDER BY round_no DESC, id DESC LIMIT 1", arrayOf(today()))
     fun get(id: Long): Plan? = query("id=?", arrayOf(id.toString()))
     private fun query(where: String, args: Array<String>? = null): Plan? = db.rawQuery("SELECT $columns FROM study_plans WHERE $where", args).use { c ->
-        if(!c.moveToFirst()) null else Plan(c.getLong(0), c.getString(1), c.getString(2), c.getString(3), c.getString(4), c.getInt(5), c.getInt(6), c.getString(7), c.getString(8))
+        if(!c.moveToFirst()) null else Plan(
+            id = c.getLong(0),
+            day = c.getString(1),
+            title = c.getString(2),
+            reason = c.getString(3),
+            phase = c.getString(4),
+            cursor = c.getInt(5),
+            revision = c.getInt(6),
+            adjustment = c.getString(7),
+            reflection = c.getString(8),
+            roundNo = c.getInt(9),
+            formatVersion = c.getInt(10),
+            status = c.getString(11),
+            plannedCredit = c.getInt(12),
+            doneCredit = c.getInt(13),
+            activeMs = c.getLong(14),
+            measurementValid = c.getInt(15) == 1,
+            preferencesRevision = c.getInt(16),
+            ruleVersion = c.getInt(17),
+            planRevisionNo = c.getInt(18),
+            budgetSnapshot = c.getString(19)
+        )
     }
 
-    fun items(id: Long): List<PlanItem> = db.rawQuery("SELECT id,word_id,english,meaning,example,translation,purpose,learned,rating FROM study_items WHERE plan_id=? ORDER BY id", arrayOf(id.toString())).use { c ->
-        buildList { while(c.moveToNext()) add(PlanItem(c.getLong(0), c.getLong(1), c.getString(2), c.getString(3), c.getString(4), c.getString(5), c.getString(6), c.getInt(7) == 1, c.getString(8))) }
+    fun items(id: Long): List<PlanItem> = db.rawQuery("SELECT id,word_id,english,meaning,example,translation,purpose,learned,rating,reason_code,reason_text,item_key FROM study_items WHERE plan_id=? ORDER BY id", arrayOf(id.toString())).use { c ->
+        buildList { while(c.moveToNext()) add(PlanItem(c.getLong(0), c.getLong(1), c.getString(2), c.getString(3), c.getString(4), c.getString(5), c.getString(6), c.getInt(7) == 1, c.getString(8), c.getString(9), c.getString(10), c.getString(11))) }
     }
 
     fun questions(id: Long, phase: String): List<StudyQuestion> = db.rawQuery("SELECT snapshot,listening,draft,assisted,answer,replays FROM study_questions WHERE plan_id=? AND phase=? ORDER BY position", arrayOf(id.toString(), phase)).use { c ->
@@ -194,6 +236,226 @@ class PlanStore(private val app: Context) {
             .put("review_results", JSONArray(items(id).filter { it.rating.isNotEmpty() }.map { JSONObject().put("word_id", it.wordId).put("self_rating", it.rating) }))
     }
 
+    fun recentHistory(): List<PastDayPlanRecord> = db.rawQuery(
+        "SELECT day, round_no, format_version, status, planned_credit, done_credit, active_ms, measurement_valid, preferences_revision FROM study_plans ORDER BY id DESC LIMIT 30",
+        null
+    ).use { c ->
+        buildList {
+            while (c.moveToNext()) {
+                add(
+                    PastDayPlanRecord(
+                        day = c.getString(0),
+                        roundNo = c.getInt(1),
+                        formatVersion = c.getInt(2),
+                        status = c.getString(3),
+                        plannedCredit = c.getInt(4),
+                        doneCredit = c.getInt(5),
+                        activeMs = c.getLong(6),
+                        measurementValid = c.getInt(7) == 1,
+                        preferencesRevision = c.getInt(8)
+                    )
+                )
+            }
+        }
+    }
+
+    /** 读取某计划的所有环节列表 */
+    fun stages(planId: Long): List<StageRecord> = db.rawQuery(
+        "SELECT stage_key, plan_id, item_id, word_id, position, dimension, stage_type, snapshot, credit, status, draft, assisted, result_event_key, active_ms, measurement_valid, updated FROM study_item_stages WHERE plan_id=? ORDER BY position",
+        arrayOf(planId.toString())
+    ).use { c ->
+        buildList {
+            while (c.moveToNext()) {
+                add(
+                    StageRecord(
+                        stageKey = c.getString(0),
+                        planId = c.getLong(1),
+                        itemId = c.getLong(2),
+                        wordId = c.getLong(3),
+                        position = c.getInt(4),
+                        dimension = c.getString(5),
+                        stageType = c.getString(6),
+                        snapshot = c.getString(7),
+                        credit = c.getInt(8),
+                        status = c.getString(9),
+                        draft = c.getString(10),
+                        assisted = c.getInt(11) == 1,
+                        resultEventKey = if (c.isNull(12)) null else c.getString(12),
+                        activeMs = c.getLong(13),
+                        measurementValid = c.getInt(14) == 1,
+                        updated = c.getLong(15)
+                    )
+                )
+            }
+        }
+    }
+
+    /** 写入环节草稿 */
+    fun saveStageDraft(stageKey: String, draft: String) = transaction {
+        require(draft.length <= 500)
+        db.execSQL(
+            "UPDATE study_item_stages SET draft=?, updated=? WHERE stage_key=? AND status='pending'",
+            arrayOf<Any>(draft, System.currentTimeMillis(), stageKey)
+        )
+    }
+
+    /** 环节推进完成 */
+    fun completeStage(stageKey: String, eventKey: String?, assisted: Boolean, activeMs: Long) = transaction {
+        val stage = db.rawQuery(
+            "SELECT plan_id, credit, status FROM study_item_stages WHERE stage_key=?",
+            arrayOf(stageKey)
+        ).use { c ->
+            if (c.moveToFirst()) Triple(c.getLong(0), c.getInt(1), c.getString(2)) else null
+        } ?: error("环节不存在")
+        require(stage.third == "pending") { "环节已非 pending 状态" }
+
+        val planId = stage.first
+        val credit = stage.second
+
+        db.execSQL(
+            "UPDATE study_item_stages SET status='done', result_event_key=?, assisted=?, active_ms=active_ms+?, updated=? WHERE stage_key=?",
+            arrayOf<Any>(eventKey ?: "", if (assisted) 1 else 0, activeMs, System.currentTimeMillis(), stageKey)
+        )
+        db.execSQL(
+            "UPDATE study_plans SET done_credit=done_credit+?, active_ms=active_ms+?, status='RUNNING', updated=? WHERE id=?",
+            arrayOf<Any>(credit, activeMs, System.currentTimeMillis(), planId)
+        )
+
+        val remaining = db.rawQuery(
+            "SELECT COUNT(1) FROM study_item_stages WHERE plan_id=? AND status='pending'",
+            arrayOf(planId.toString())
+        ).use { it.moveToFirst(); it.getInt(0) }
+        if (remaining == 0) {
+            db.execSQL("UPDATE study_plans SET status='DONE', updated=? WHERE id=?", arrayOf<Any>(System.currentTimeMillis(), planId))
+        }
+        bump(planId)
+    }
+
+    /** 跳过环节 */
+    fun skipStage(stageKey: String) = transaction {
+        val planId = db.rawQuery("SELECT plan_id FROM study_item_stages WHERE stage_key=?", arrayOf(stageKey)).use {
+            if (it.moveToFirst()) it.getLong(0) else error("环节不存在")
+        }
+        db.execSQL(
+            "UPDATE study_item_stages SET status='skipped', updated=? WHERE stage_key=? AND status='pending'",
+            arrayOf<Any>(System.currentTimeMillis(), stageKey)
+        )
+        val remaining = db.rawQuery(
+            "SELECT COUNT(1) FROM study_item_stages WHERE plan_id=? AND status='pending'",
+            arrayOf(planId.toString())
+        ).use { it.moveToFirst(); it.getInt(0) }
+        if (remaining == 0) {
+            db.execSQL("UPDATE study_plans SET status='DONE', updated=? WHERE id=?", arrayOf<Any>(System.currentTimeMillis(), planId))
+        }
+        bump(planId)
+    }
+
+    fun pausePlan(planId: Long, activeMs: Long) = transaction {
+        db.execSQL(
+            "UPDATE study_plans SET status='PAUSED', active_ms=active_ms+?, updated=? WHERE id=? AND status='RUNNING'",
+            arrayOf<Any>(activeMs, System.currentTimeMillis(), planId)
+        )
+        bump(planId)
+    }
+
+    fun resumePlan(planId: Long) = transaction {
+        db.execSQL(
+            "UPDATE study_plans SET status='RUNNING', updated=? WHERE id=? AND status IN ('READY', 'PAUSED')",
+            arrayOf<Any>(System.currentTimeMillis(), planId)
+        )
+        bump(planId)
+    }
+
+    fun abandonPlan(planId: Long) = transaction {
+        db.execSQL(
+            "UPDATE study_plans SET status='ABANDONED', updated=? WHERE id=? AND status IN ('READY', 'RUNNING', 'PAUSED')",
+            arrayOf<Any>(System.currentTimeMillis(), planId)
+        )
+        bump(planId)
+    }
+
+    /** 创建 format_version = 2 计划 */
+    fun createV2(plan: ProposedPlan, expectedEpoch: Long = epoch()): Plan = transaction {
+        require(epoch() == expectedEpoch) { "资料已清空，本次计划未保存" }
+        val cur = current()
+        require(cur == null || cur.status in listOf("DONE", "ABANDONED") || (cur.formatVersion == 1 && cur.phase == "DONE")) {
+            "已有进行中的计划，请继续原计划"
+        }
+
+        val todayStr = today()
+        val latestRound = db.rawQuery(
+            "SELECT MAX(round_no) FROM study_plans WHERE day=?",
+            arrayOf(todayStr)
+        ).use { c -> if (c.moveToFirst() && !c.isNull(0)) c.getInt(0) else -1 }
+        val nextRound = if (latestRound >= 0) latestRound + 1 else 0
+
+        val planValues = ContentValues().apply {
+            put("day", todayStr)
+            put("round_no", nextRound)
+            put("format_version", 2)
+            put("status", "READY")
+            put("title", plan.title)
+            put("reason", plan.reason)
+            put("phase", "STAGES")
+            put("cursor", 0)
+            put("revision", 0)
+            put("planned_credit", plan.plannedCredit)
+            put("done_credit", 0)
+            put("active_ms", 0L)
+            put("measurement_valid", 1)
+            put("preferences_revision", StudyPreferences(app).revision)
+            put("rule_version", 1)
+            put("plan_revision_no", 0)
+            put("budget_snapshot", plan.budgetSnapshotJson)
+            put("updated", System.currentTimeMillis())
+        }
+        val planId = db.insertOrThrow("study_plans", null, planValues)
+
+        var globalPos = 0
+        for (item in plan.items) {
+            val itemKey = "$planId:${item.wordId}"
+            val itemValues = ContentValues().apply {
+                put("plan_id", planId)
+                put("word_id", item.wordId)
+                put("english", item.english)
+                put("meaning", item.meaning)
+                put("example", item.example)
+                put("translation", item.translation)
+                put("purpose", if (item.reasonCode.startsWith("due") || item.reasonCode.startsWith("consolidate")) "REVIEW" else "LEARN")
+                put("learned", 0)
+                put("rating", "")
+                put("reason_code", item.reasonCode)
+                put("reason_text", item.reasonText)
+                put("item_key", itemKey)
+            }
+            val itemId = db.insertOrThrow("study_items", null, itemValues)
+
+            for (stage in item.stages) {
+                val stageKey = "$planId:$itemId:${stage.dimension}:${stage.stageType}"
+                val stageValues = ContentValues().apply {
+                    put("stage_key", stageKey)
+                    put("plan_id", planId)
+                    put("item_id", itemId)
+                    put("word_id", item.wordId)
+                    put("position", globalPos++)
+                    put("dimension", stage.dimension)
+                    put("stage_type", stage.stageType)
+                    put("snapshot", stage.questionSnapshot)
+                    put("credit", stage.credit)
+                    put("status", "pending")
+                    put("draft", "")
+                    put("assisted", 0)
+                    put("active_ms", 0L)
+                    put("measurement_valid", 1)
+                    put("updated", System.currentTimeMillis())
+                }
+                db.insertOrThrow("study_item_stages", null, stageValues)
+            }
+        }
+
+        checkNotNull(get(planId))
+    }
+
     private fun requireRevision(id: Long, revision: Int) = checkNotNull(get(id)).also { require(it.revision == revision) { "学习进度已变化，本次建议未覆盖已有资料" } }
     private fun bump(id: Long) { db.execSQL("UPDATE study_plans SET revision=revision+1,updated=? WHERE id=?", arrayOf<Any>(System.currentTimeMillis(), id)) }
     private fun change(id: Long, phase: String, cursor: Int) { db.execSQL("UPDATE study_plans SET phase=?,cursor=? WHERE id=?", arrayOf<Any>(phase, cursor, id)); bump(id) }
@@ -205,8 +467,15 @@ class PlanStore(private val app: Context) {
         fun createTables(db: SQLiteDatabase) {
             db.execSQL("CREATE TABLE study_meta(id INTEGER PRIMARY KEY CHECK(id=1),epoch INTEGER NOT NULL)")
             db.execSQL("INSERT INTO study_meta VALUES(1,0)")
-            db.execSQL("CREATE TABLE study_plans(id INTEGER PRIMARY KEY AUTOINCREMENT,day TEXT NOT NULL UNIQUE,title TEXT NOT NULL,reason TEXT NOT NULL,phase TEXT NOT NULL DEFAULT 'LEARN',cursor INTEGER NOT NULL DEFAULT 0,revision INTEGER NOT NULL DEFAULT 0,adjustment TEXT NOT NULL DEFAULT '',reflection TEXT NOT NULL DEFAULT '',updated INTEGER NOT NULL)")
-            db.execSQL("CREATE TABLE study_items(id INTEGER PRIMARY KEY AUTOINCREMENT,plan_id INTEGER NOT NULL,word_id INTEGER NOT NULL,english TEXT NOT NULL,meaning TEXT NOT NULL,example TEXT NOT NULL,translation TEXT NOT NULL,purpose TEXT NOT NULL,learned INTEGER NOT NULL DEFAULT 0,rating TEXT NOT NULL DEFAULT '',UNIQUE(plan_id,word_id))")
+            db.execSQL("CREATE TABLE study_plans(id INTEGER PRIMARY KEY AUTOINCREMENT,day TEXT NOT NULL,round_no INTEGER NOT NULL DEFAULT 0,format_version INTEGER NOT NULL DEFAULT 1,status TEXT NOT NULL DEFAULT 'READY',title TEXT NOT NULL,reason TEXT NOT NULL,phase TEXT NOT NULL DEFAULT 'LEARN',cursor INTEGER NOT NULL DEFAULT 0,revision INTEGER NOT NULL DEFAULT 0,adjustment TEXT NOT NULL DEFAULT '',reflection TEXT NOT NULL DEFAULT '',planned_credit INTEGER NOT NULL DEFAULT 0,done_credit INTEGER NOT NULL DEFAULT 0,active_ms INTEGER NOT NULL DEFAULT 0,measurement_valid INTEGER NOT NULL DEFAULT 0,preferences_revision INTEGER NOT NULL DEFAULT 0,rule_version INTEGER NOT NULL DEFAULT 1,plan_revision_no INTEGER NOT NULL DEFAULT 0,budget_snapshot TEXT NOT NULL DEFAULT '{}',updated INTEGER NOT NULL,UNIQUE(day,round_no))")
+            db.execSQL("CREATE INDEX study_plans_day_round ON study_plans(day, round_no)")
+            db.execSQL("CREATE INDEX study_plans_status ON study_plans(status, format_version)")
+            db.execSQL("CREATE TABLE study_items(id INTEGER PRIMARY KEY AUTOINCREMENT,plan_id INTEGER NOT NULL,word_id INTEGER NOT NULL,english TEXT NOT NULL,meaning TEXT NOT NULL,example TEXT NOT NULL,translation TEXT NOT NULL,purpose TEXT NOT NULL,learned INTEGER NOT NULL DEFAULT 0,rating TEXT NOT NULL DEFAULT '',reason_code TEXT NOT NULL DEFAULT '',reason_text TEXT NOT NULL DEFAULT '',item_key TEXT NOT NULL DEFAULT '',UNIQUE(plan_id,word_id))")
+            db.execSQL("CREATE TABLE study_item_stages(stage_key TEXT PRIMARY KEY,plan_id INTEGER NOT NULL,item_id INTEGER NOT NULL,word_id INTEGER NOT NULL,position INTEGER NOT NULL,dimension TEXT NOT NULL,stage_type TEXT NOT NULL,snapshot TEXT NOT NULL DEFAULT '',credit INTEGER NOT NULL DEFAULT 1,status TEXT NOT NULL DEFAULT 'pending',draft TEXT NOT NULL DEFAULT '',assisted INTEGER NOT NULL DEFAULT 0,result_event_key TEXT,active_ms INTEGER NOT NULL DEFAULT 0,measurement_valid INTEGER NOT NULL DEFAULT 1,updated INTEGER NOT NULL)")
+            db.execSQL("CREATE INDEX stages_plan_pos ON study_item_stages(plan_id, position)")
+            db.execSQL("CREATE INDEX stages_word ON study_item_stages(word_id)")
+            db.execSQL("CREATE TABLE plan_revisions(id INTEGER PRIMARY KEY AUTOINCREMENT,plan_id INTEGER NOT NULL,revision_no INTEGER NOT NULL,action TEXT NOT NULL,before_snapshot TEXT NOT NULL DEFAULT '',after_snapshot TEXT NOT NULL DEFAULT '',user_constraints TEXT NOT NULL DEFAULT '',reason TEXT NOT NULL DEFAULT '',created INTEGER NOT NULL,UNIQUE(plan_id,revision_no))")
+            db.execSQL("CREATE INDEX plan_revisions_plan ON plan_revisions(plan_id, revision_no)")
             db.execSQL("CREATE TABLE study_questions(plan_id INTEGER NOT NULL,phase TEXT NOT NULL,position INTEGER NOT NULL,snapshot TEXT NOT NULL,listening INTEGER NOT NULL DEFAULT 0,draft TEXT NOT NULL DEFAULT '',assisted INTEGER NOT NULL DEFAULT 0,answer TEXT NOT NULL DEFAULT '',replays INTEGER NOT NULL DEFAULT 0,PRIMARY KEY(plan_id,phase,position))")
             db.execSQL("CREATE TABLE study_reviews(word_id INTEGER NOT NULL,skill TEXT NOT NULL,streak INTEGER NOT NULL,next_due INTEGER NOT NULL,last_at INTEGER NOT NULL,PRIMARY KEY(word_id,skill))")
         }

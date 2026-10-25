@@ -250,7 +250,7 @@ class LearningSync:
     def backup(self, data):
         if not isinstance(data, dict) or set(data) != {"schema", "created", "tables"} or data["schema"] != 1:
             raise ValueError("学习备份格式无效")
-        allowed = {"words", "word_materials", "messages", "conversations", "learning_actions", "word_workspaces", "oral_recordings", "quiz_attempts", "oral_assessments", "learning_events", "independent_exams", "learner_memory", "ai_usage", "study_plans", "study_items", "study_questions", "study_reviews", "desktop_sources"}
+        allowed = {"words", "word_materials", "messages", "conversations", "learning_actions", "word_workspaces", "oral_recordings", "quiz_attempts", "oral_assessments", "learning_events", "independent_exams", "learner_memory", "ai_usage", "study_plans", "study_items", "study_questions", "study_reviews", "desktop_sources", "learner_model", "user_overrides", "study_item_stages", "plan_revisions"}
         if not isinstance(data["tables"], dict) or not set(data["tables"]) <= allowed:
             raise ValueError("备份包含不支持的配置")
         for rows in data["tables"].values():

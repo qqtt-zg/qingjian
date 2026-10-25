@@ -9,4 +9,5 @@ data class VocabularyEntry(
     val played: Int,
     val reviewed: Int,
     val lastSeen: Long,
+    val glossOrigin: String = "unknown",
 )
