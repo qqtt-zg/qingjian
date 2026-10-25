@@ -362,11 +362,22 @@ object PlanBuilder {
         )
     }
 
+    fun resolveTargetDimension(cand: CandidateWord, skip: SkipHistory?): String {
+        val defaultDim = cand.dimensions.firstOrNull()?.dimension ?: EventDimension.SPELLING.key
+        if (skip != null && skip.consecutiveSkipDays == 2 && skip.lastSkippedDimension == defaultDim) {
+            val alt = cand.dimensions.map { it.dimension }.firstOrNull { it != defaultDim }
+                ?: if (defaultDim == EventDimension.SPELLING.key) EventDimension.MEANING.key else EventDimension.SPELLING.key
+            return alt
+        }
+        return defaultDim
+    }
+
     fun assembleCandidatePools(
         words: List<VocabularyEntry>,
         learnerEntries: List<LearnerModelEntry>,
         overrides: Map<Pair<Long, String>, UserOverride>,
         desktopCommittedMap: Map<Long, Int> = emptyMap(),
+        skipHistories: Map<Long, SkipHistory> = emptyMap(),
         nowMillis: Long = System.currentTimeMillis()
     ): CandidatePools {
         val entriesByWord = learnerEntries.groupBy { it.wordId }
@@ -376,6 +387,11 @@ object PlanBuilder {
         val consolidateList = mutableListOf<CandidateWord>()
 
         for (word in words) {
+            val skip = skipHistories[word.id]
+            // 连续 3 天跳过：本周内从自动排程池中彻底排除（用户显式指定除外）
+            if (skip != null && skip.consecutiveSkipDays >= 3) {
+                continue
+            }
             val entries = entriesByWord[word.id].orEmpty()
             val dimensions = entries.map { entry ->
                 val override = overrides[word.id to entry.dimension]
@@ -432,40 +448,17 @@ object PlanBuilder {
 
     /** 从数据库读取实际状态，纯本地生成并保存新格式今日计划 */
     fun buildAndSave(context: Context, nowMillis: Long = System.currentTimeMillis()): Plan? {
-        val store = org.qingjian.speech.learning.LearningStore.get(context)
+        val pack = ContextPack.assemble(context, nowMillis)
+        if (pack.totalWords == 0) return null
         val plans = PlanStore(context)
         val prefs = org.qingjian.speech.learning.StudyPreferences(context)
-        val words = store.allWords()
-        if (words.isEmpty()) return null
 
-        val learnerStore = org.qingjian.speech.learning.learner.LearnerModelStore(store.writableDatabase)
-        val allEntries = mutableListOf<LearnerModelEntry>()
-        for (w in words) {
-            allEntries.addAll(learnerStore.forWord(w.id))
-        }
-        val overrides = learnerStore.activeOverrides()
-
-        val pools = assembleCandidatePools(words, allEntries, overrides, emptyMap(), nowMillis)
-        val (factor, factorReason) = ContextPack.deriveFactor(plans.recentHistory(), prefs.revision)
-        val usable = PlanConstraints.calculateUsableCredit(prefs.minutes, factor)
         val limits = PlanConstraints.resolveLimits(
-            usableCredit = usable,
+            usableCredit = pack.budget.usableCredit,
             preferenceNewWords = prefs.newWords,
             isBeginner = prefs.level.startsWith("基础较弱"),
-            freshCount = pools.fresh.size,
-            freshOnlyDesktop = pools.fresh.isNotEmpty() && pools.fresh.all { it.desktopCommitted > 0 }
-        )
-
-        val pack = ContextPack(
-            today = PlanStore.today(),
-            epoch = plans.epoch(),
-            preferencesRevision = prefs.revision,
-            desktopRevision = System.currentTimeMillis(),
-            modelRevision = 1,
-            budget = BudgetSnapshot(prefs.minutes, factor, factorReason, usable),
-            candidates = pools,
-            materials = emptyMap(),
-            totalWords = words.size
+            freshCount = pack.candidates.fresh.size,
+            freshOnlyDesktop = pack.candidates.fresh.isNotEmpty() && pack.candidates.fresh.all { it.desktopCommitted > 0 }
         )
 
         val proposed = build(pack, limits)

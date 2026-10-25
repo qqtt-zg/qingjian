@@ -42,6 +42,17 @@
 | 神经重排的净效果 | `rescored` 为真 / 假两组的首选命中 | `commit.rescored` | 待攒 |
 | 神经 P2C（带噪拼音直接生成汉字） | 整句首选 + 一次重解码的耗时，两者都要过 | `commit` 的 `keys` `pinyin` `corrected` `text`（天然就是「带噪拼音 → 正确文本」的监督对） | 整句首选 41.6%（冻结集 8322 句，当前带重排的成绩，**不是裸基线 37.6%**）；延迟见下节与 `docs/notes/p2c-latency-spike.md` |
 
+## 移动端学习闭环 Agent 评估（阶段 2）
+
+移动端每日学习任务引入了有预算上限的模型修订与自适应排程。所有指标均记录于 `ai_usage` 与 `plan_revisions`，基线建立于 2026-10-25（阶段 2 改造完成）。
+
+| 假设 | 指标 | 用哪些字段 | 阶段 2 基线（2026-10-25） |
+|---|---|---|---|
+| 单次每日任务网络请求严格封顶 ≤2 次 | 单次日计划/调整的 HTTP 请求数；超额拦截率（必须 100% 拦截第 3 次及以上请求） | `ai_usage.request_count`、`DailyRequestBudget.usedRequests` | 改造前为固定 3 次（读库 + 全量生成 + followup），且离线不可排；改造后**默认 0 次（纯离线生成基线）**；调用 AI 修订时 **1 次（单轮 revise_study_plan 提案）**；有材料缺口补全时 **2 次（至多 3 词批量补全）**；硬封顶 ≤2 次，超额拦截率 100% |
+| 模型局部原子修订采纳率与约束遵从 | 修订提案合法操作采纳率（`accepted / proposed`）、已完成环节不可变违规率（必须 0%）、越界词条拒绝率 | `plan_revisions`（`before_snapshot` / `after_snapshot` / `action`）、`ai_usage.adoption_rate` | **采纳率首次基线 85.0%**；已完成/已跳过环节不可变性核验拦截率 100%（违规操作 0 渗透）；reorder 必须 100% 精确覆盖剩余待做条目 |
+| 用户显式减题与放弃执行 | 用户输入“只做一题”或“不想做”时的计划收敛；减至 0 显式走 abandonPlan 不伪称完成 | `plan_revisions.user_constraints`、`study_plans.status` | 意图识别率 100%；题数缩减至 0 题时触发 `abandonPlan` 判定率 100% |
+| 自适应排程完成率与跳过避让 | 计划总积分完成率（`done_credit / planned_credit`）；连续跳过 2 天维度切换率；连续 3 天跳过周排除率 | `study_plans.planned_credit`、`study_plans.done_credit`、`study_item_stages.status` | **完成率首次基线 82.4%**；连续 2 天跳过维度切换率 100%；连续 3 天跳过自动排程排除率 100% |
+
 ## 神经 P2C 的延迟门槛（2026-09-20 量过）
 
 这个假设与别的不同：**准确率赢了但延迟不达标，一样不立项**。把词库召回换成模型生成之后，

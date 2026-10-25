@@ -29,6 +29,12 @@ data class CandidateWord(
     val length: Int = english.length
 )
 
+data class SkipHistory(
+    val wordId: Long,
+    val consecutiveSkipDays: Int,
+    val lastSkippedDimension: String?
+)
+
 data class CandidatePools(
     val due: List<CandidateWord>,
     val weak: List<CandidateWord>,
@@ -151,6 +157,37 @@ data class ContextPack(
             }
 
             return if (weightSum > 0) scoreSum / weightSum else 0.0
+        }
+
+        /** 从应用上下文中收集最新词库、学习记录、偏好与跳过历史，装配 ContextPack 快照 */
+        fun assemble(context: android.content.Context, nowMillis: Long = System.currentTimeMillis()): ContextPack {
+            val store = org.qingjian.speech.learning.LearningStore.get(context)
+            val plans = PlanStore(context)
+            val prefs = org.qingjian.speech.learning.StudyPreferences(context)
+            val words = store.allWords()
+
+            val learnerStore = org.qingjian.speech.learning.learner.LearnerModelStore(store.writableDatabase)
+            val allEntries = mutableListOf<org.qingjian.speech.learning.learner.LearnerModelEntry>()
+            for (w in words) {
+                allEntries.addAll(learnerStore.forWord(w.id))
+            }
+            val overrides = learnerStore.activeOverrides()
+            val skipHistories = plans.skippedWordsHistory(7)
+            val pools = PlanBuilder.assembleCandidatePools(words, allEntries, overrides, emptyMap(), skipHistories, nowMillis)
+            val (factor, factorReason) = deriveFactor(plans.recentHistory(), prefs.revision)
+            val usable = PlanConstraints.calculateUsableCredit(prefs.minutes, factor)
+
+            return ContextPack(
+                today = PlanStore.today(),
+                epoch = plans.epoch(),
+                preferencesRevision = prefs.revision,
+                desktopRevision = System.currentTimeMillis(),
+                modelRevision = 1,
+                budget = BudgetSnapshot(prefs.minutes, factor, factorReason, usable),
+                candidates = pools,
+                materials = emptyMap(),
+                totalWords = words.size
+            )
         }
     }
 }

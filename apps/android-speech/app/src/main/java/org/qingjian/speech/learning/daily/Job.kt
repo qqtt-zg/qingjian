@@ -23,8 +23,8 @@ class Job(context: Context, var planId: Long) {
 
     fun start(mode: String, instruction: String = "") {
         if(busy || closed) return
-        cancelled=false; busy=true; notice=when(mode) { "CREATE" -> "正在安排今天的学习…"; "ADAPT" -> "正在根据实际作答调整…"; else -> "正在生成本轮回顾…" }
-        val request = Client().apply {task=when(mode){"CREATE"->"每日学习 · 安排";"ADAPT"->"每日学习 · 调整";else->"每日学习 · 回顾"}}; client=request; changed?.invoke()
+        cancelled=false; busy=true; notice=when(mode) { "CREATE" -> "正在安排今天的学习…"; "ADAPT", "REVISE" -> "正在根据实际作答调整…"; else -> "正在生成本轮回顾…" }
+        val request = Client().apply {task=when(mode){"CREATE"->"每日学习 · 安排";"ADAPT", "REVISE"->"每日学习 · 调整";else->"每日学习 · 回顾"}}; client=request; changed?.invoke()
         worker.execute {
             val result = runCatching { Agent(app).run(mode, planId, instruction, request, Credentials(app).load(), { cancelled || closed }) { stage ->
                 main.post { if(!closed && !cancelled && busy) { notice=stage; changed?.invoke() } }

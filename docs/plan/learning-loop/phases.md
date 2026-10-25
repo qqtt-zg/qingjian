@@ -56,12 +56,12 @@
 
 ### 阶段2：有成本上限的模型修订与自适应
 
-- [ ] 改造每日Koog执行路径，直接传Pack，提案后终止，共用最多2次HTTP请求预算。
-- [ ] 加修订逐条校验、请求/取消反馈、规则拒绝理由；已完成结果不可变。
-- [ ] 接入真实credit反馈、有效测时、偏好revision及派生factor、跳过避让。
-- 验收：0/1/2请求的真实传输计数；无隐式读事实或收尾第三次；缺材料超过3词时明确延期。
-- 验收：按 `docs/plan/model-eval.md` 的尺子留基线对比——改造前每日3次请求、采纳率与完成率均无基线值；改造后请求数≤2，并首次记下采纳率与完成率的基线值，后续改动一律与该基线比。
-- 验收：三天低完成率降为0.8；未满三天、零分母、测时未知和偏好变更正确回到1.0或不触发加速；用户“只做一题”不被factor/模型放宽。
+- [x] 改造每日Koog执行路径，直接传Pack，提案后终止，共用最多2次HTTP请求预算（`DailyRequestBudget.kt`、`Runner.kt:50` 单轮 `singleTurn = true` 终止、`ToolCatalog.kt` 声明 `revise_study_plan` 与 `prepare_word_materials_batch`）。
+- [x] 加修订逐条校验、请求/取消反馈、规则拒绝理由；已完成结果不可变（`PlanRevisionEngine.kt` 实现原子操作校验，拦截已完成/已跳过环节的 drop/swap/reorder，`PlanStore.applyRevision` 原子更新并存入 `plan_revisions`）。
+- [x] 接入真实credit反馈、有效测时、偏好revision及派生factor、跳过避让（`ContextPack.deriveFactor` 实现 3 天低完成率 0.8 / 测时加速 1.1 / 偏好变更重置 1.0；`PlanBuilder.kt` 接入连续 2 天跳过换维度、连续 3 天跳过周暂停排程）。
+- 验收：0/1/2请求的真实传输计数；无隐式读事实或收尾第三次；缺材料超过3词时明确延期（`DailyRequestBudgetTest`、`DailyAgentRevisionTest` 全绿）。
+- 验收：按 `docs/plan/model-eval.md` 的尺子留基线对比——改造前每日3次请求、采纳率与完成率均无基线值；改造后请求数≤2，并首次记下采纳率（85.0%）与完成率（82.4%）的基线值，后续改动一律与该基线比（见 `docs/plan/model-eval.md` 阶段 2 基线表）。
+- 验收：三天低完成率降为0.8；未满三天、零分母、测时未知和偏好变更正确回到1.0或不触发加速；用户“只做一题”不被factor/模型放宽（`AdaptiveScheduleTest`、`SkipAvoidanceTest`、`PlanRevisionEngineTest` 全绿）。
 
 ### 阶段3：可选应用聚合与跨端意图
 

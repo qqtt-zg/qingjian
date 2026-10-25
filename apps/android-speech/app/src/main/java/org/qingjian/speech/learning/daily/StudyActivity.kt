@@ -92,7 +92,10 @@ class StudyActivity : Activity() {
                 "hint" -> plans.assist(p.id)
                 "reveal" -> revealed=true
                 "rate" -> {plans.rate(p.id,value=="yes");revealed=false}
-                "adapt" -> {job.start("ADAPT");return}
+                "adapt" -> {
+                    if (p.formatVersion >= 2) job.start("REVISE") else job.start("ADAPT")
+                    return
+                }
                 "skip" -> plans.skipAdjustment(p.id)
                 "summary" -> {job.start("SUMMARY","请依据本轮真实作答、辅助和自评结果给出简短回顾与下一步建议。");return}
                 "finish" -> {if(p.phase=="SUMMARY")plans.advance(p.id);finish();return}
@@ -103,7 +106,18 @@ class StudyActivity : Activity() {
                 "adjust" -> {
                     val input=ui.input("例如：今天轻松一点，后续只做一题",multiline=true)
                     AlertDialog.Builder(this).setTitle("调整后续小测").setView(input).setMessage("保留已完成进度，老师只调整尚未开始的小测。")
-                        .setNegativeButton("取消",null).setPositiveButton("交给老师调整") {_,_->job.start("ADAPT",input.text.toString().take(1000))}.show();return
+                        .setNegativeButton("取消",null).setPositiveButton("交给老师调整") {_,_->
+                            val text = input.text.toString().take(1000)
+                            if (p.formatVersion >= 2) job.start("REVISE", text) else job.start("ADAPT", text)
+                        }.show();return
+                }
+                "v2_adjust" -> {
+                    val input = ui.input("例如：今天轻松一点，后续只做一题", multiline = true)
+                    AlertDialog.Builder(this).setTitle("AI 调整后续环节").setView(input).setMessage("保留已完成进度，老师只调整尚未开始的环节。")
+                        .setNegativeButton("取消", null).setPositiveButton("交给老师调整") { _, _ ->
+                            job.start("REVISE", input.text.toString().take(1000))
+                        }.show()
+                    return
                 }
                 "v2_complete" -> {
                     plans.completeStage(value, null, false, activeMs)

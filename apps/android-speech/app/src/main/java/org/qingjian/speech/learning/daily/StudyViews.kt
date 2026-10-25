@@ -270,6 +270,7 @@ class StudyViews(private val activity: Activity, private val plans: PlanStore, p
             }
         }
 
+        foot.addView(ui.button("AI 调整后续环节") { action("v2_adjust", "") })
         foot.addView(ui.button("放弃本轮") { action("v2_abandon", p.id.toString()) })
     }
 }

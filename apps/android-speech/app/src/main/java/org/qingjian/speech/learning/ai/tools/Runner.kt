@@ -32,7 +32,8 @@ class Runner(context: Context) {
 
     fun complete(client: Client, profile: Profile, messages: JSONArray, topic: String, question: Long,
         cancelled: () -> Boolean, progress: (String) -> Unit, enabled: Boolean = true,
-        definitions: JSONArray = Catalog.definitions(), executeLocal: ((ToolCall, String, Long) -> JSONObject)? = null): String = runBlocking {
+        definitions: JSONArray = Catalog.definitions(), singleTurn: Boolean = false,
+        executeLocal: ((ToolCall, String, Long) -> JSONObject)? = null): String = runBlocking {
         val transport = Transport(client, profile, enabled, cancelled, progress, definitions)
         val registry = ToolRegistry {
             if(enabled) {
@@ -46,9 +47,13 @@ class Runner(context: Context) {
             edge(nodeStart forwardTo request)
             edge(request forwardTo tools onToolCalls { true })
             edge(request forwardTo nodeFinish onCondition { it.parts.none { part -> part is MessagePart.Tool.Call } } transformed { it.textContent() })
-            edge(tools forwardTo followup)
-            edge(followup forwardTo tools onToolCalls { true })
-            edge(followup forwardTo nodeFinish onCondition { it.parts.none { part -> part is MessagePart.Tool.Call } } transformed { it.textContent() })
+            if (singleTurn) {
+                edge(tools forwardTo nodeFinish transformed { "proposal_received" })
+            } else {
+                edge(tools forwardTo followup)
+                edge(followup forwardTo tools onToolCalls { true })
+                edge(followup forwardTo nodeFinish onCondition { it.parts.none { part -> part is MessagePart.Tool.Call } } transformed { it.textContent() })
+            }
         }
         val model = LLModel(LLMProvider("qingjian-compatible", "用户配置的文字服务"), profile.model,
             listOf(LLMCapability.Completion, LLMCapability.Tools))

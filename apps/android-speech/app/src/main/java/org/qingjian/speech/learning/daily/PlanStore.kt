@@ -374,6 +374,192 @@ class PlanStore(private val app: Context) {
         bump(planId)
     }
 
+    /** 保存计划修订记录并递增 plan_revision_no */
+    fun saveRevision(record: PlanRevisionRecord) = transaction {
+        val values = ContentValues().apply {
+            put("plan_id", record.planId)
+            put("revision_no", record.revisionNo)
+            put("action", record.action)
+            put("before_snapshot", record.beforeSnapshot)
+            put("after_snapshot", record.afterSnapshot)
+            put("user_constraints", record.userConstraints)
+            put("reason", record.reason)
+            put("created", record.timestamp)
+        }
+        db.insertWithOnConflict("plan_revisions", null, values, SQLiteDatabase.CONFLICT_REPLACE)
+        db.execSQL(
+            "UPDATE study_plans SET plan_revision_no=plan_revision_no+1, updated=? WHERE id=?",
+            arrayOf<Any>(System.currentTimeMillis(), record.planId)
+        )
+        bump(record.planId)
+    }
+
+    /** 查询最近 N 天内各词汇的跳过历史 */
+    fun skippedWordsHistory(days: Int = 7): Map<Long, SkipHistory> {
+        val cutoff = System.currentTimeMillis() - days * 86400000L
+        val historyMap = mutableMapOf<Long, MutableList<Pair<String, String>>>()
+
+        db.rawQuery(
+            "SELECT p.day, s.word_id, s.dimension FROM study_item_stages s JOIN study_plans p ON s.plan_id = p.id WHERE s.status = 'skipped' AND s.updated >= ? ORDER BY p.day DESC",
+            arrayOf(cutoff.toString())
+        ).use { c ->
+            while (c.moveToNext()) {
+                val day = c.getString(0)
+                val wordId = c.getLong(1)
+                val dim = c.getString(2)
+                historyMap.getOrPut(wordId) { mutableListOf() }.add(day to dim)
+            }
+        }
+
+        return historyMap.mapValues { (wordId, list) ->
+            val distinctDays = list.map { it.first }.distinct()
+            val lastDim = list.firstOrNull()?.second
+            SkipHistory(
+                wordId = wordId,
+                consecutiveSkipDays = distinctDays.size,
+                lastSkippedDimension = lastDim
+            )
+        }
+    }
+
+    /** 将已有 v2 计划还原为 ProposedPlan 以便进入修订流程 */
+    fun toProposedPlan(planId: Long): ProposedPlan {
+        val p = checkNotNull(get(planId))
+        val itemsList = items(planId)
+        val stagesList = stages(planId)
+        val stagesByItem = stagesList.groupBy { it.itemId }
+
+        val proposedItems = itemsList.map { item ->
+            val itemStages = stagesByItem[item.id].orEmpty().sortedBy { it.position }.map { s ->
+                ProposedStage(
+                    stageType = s.stageType,
+                    dimension = s.dimension,
+                    credit = s.credit,
+                    questionSnapshot = s.snapshot
+                )
+            }
+            ProposedItem(
+                wordId = item.wordId,
+                english = item.english,
+                meaning = item.meaning,
+                example = item.example,
+                translation = item.translation,
+                reasonCode = item.reasonCode,
+                reasonText = item.reasonText,
+                stages = itemStages
+            )
+        }
+        return ProposedPlan(
+            title = p.title,
+            reason = p.reason,
+            items = proposedItems,
+            plannedCredit = p.plannedCredit,
+            budgetSnapshotJson = p.budgetSnapshot
+        )
+    }
+
+    /** 应用修订后的计划并更新数据库中的 study_items 与 pending 的 study_item_stages */
+    fun applyRevision(
+        planId: Long,
+        revisedPlan: ProposedPlan,
+        auditRecord: PlanRevisionRecord? = null
+    ): Plan = transaction {
+        val cur = checkNotNull(get(planId))
+        val existingStages = stages(planId)
+        val existingItems = items(planId)
+
+        val immutableStages = existingStages.filter { it.status in listOf("done", "skipped") }
+        val immutableStageKeys = immutableStages.map { it.stageKey }.toSet()
+        val immutableWordIds = immutableStages.map { it.wordId }.toSet()
+
+        // 删除仍处于 pending 状态的旧 stages
+        db.execSQL("DELETE FROM study_item_stages WHERE plan_id=? AND status='pending'", arrayOf(planId.toString()))
+
+        // 删除不再使用的未学习 items
+        val revisedWordIds = revisedPlan.items.map { it.wordId }.toSet()
+        for (item in existingItems) {
+            if (item.wordId !in revisedWordIds && item.wordId !in immutableWordIds) {
+                db.delete("study_items", "id=?", arrayOf(item.id.toString()))
+            }
+        }
+
+        var globalPos = 0
+        // 先排已完成/跳过的 stages
+        for (s in immutableStages.sortedBy { it.position }) {
+            db.execSQL("UPDATE study_item_stages SET position=? WHERE stage_key=?", arrayOf<Any>(globalPos++, s.stageKey))
+        }
+
+        val updatedItems = items(planId).associateBy { it.wordId }
+
+        for (item in revisedPlan.items) {
+            val existingItem = updatedItems[item.wordId]
+            val itemId = if (existingItem != null) {
+                existingItem.id
+            } else {
+                val itemKey = "$planId:${item.wordId}"
+                val itemValues = ContentValues().apply {
+                    put("plan_id", planId)
+                    put("word_id", item.wordId)
+                    put("english", item.english)
+                    put("meaning", item.meaning)
+                    put("example", item.example)
+                    put("translation", item.translation)
+                    put("purpose", if (item.reasonCode.startsWith("due") || item.reasonCode.startsWith("consolidate")) "REVIEW" else "LEARN")
+                    put("learned", 0)
+                    put("rating", "")
+                    put("reason_code", item.reasonCode)
+                    put("reason_text", item.reasonText)
+                    put("item_key", itemKey)
+                }
+                db.insertOrThrow("study_items", null, itemValues)
+            }
+
+            for (stage in item.stages) {
+                val stageKey = "$planId:$itemId:${stage.dimension}:${stage.stageType}"
+                if (stageKey in immutableStageKeys) continue
+
+                val stageValues = ContentValues().apply {
+                    put("stage_key", stageKey)
+                    put("plan_id", planId)
+                    put("item_id", itemId)
+                    put("word_id", item.wordId)
+                    put("position", globalPos++)
+                    put("dimension", stage.dimension)
+                    put("stage_type", stage.stageType)
+                    put("snapshot", stage.questionSnapshot)
+                    put("credit", stage.credit)
+                    put("status", "pending")
+                    put("draft", "")
+                    put("assisted", 0)
+                    put("active_ms", 0L)
+                    put("measurement_valid", 1)
+                    put("updated", System.currentTimeMillis())
+                }
+                db.insertWithOnConflict("study_item_stages", null, stageValues, SQLiteDatabase.CONFLICT_REPLACE)
+            }
+        }
+
+        val totalPlannedCredit = immutableStages.sumOf { it.credit } +
+            stages(planId).filter { it.status == "pending" }.sumOf { it.credit }
+
+        db.execSQL(
+            "UPDATE study_plans SET planned_credit=?, title=?, reason=?, updated=? WHERE id=?",
+            arrayOf<Any>(totalPlannedCredit, revisedPlan.title, revisedPlan.reason, System.currentTimeMillis(), planId)
+        )
+
+        if (auditRecord != null) {
+            saveRevision(auditRecord)
+        } else {
+            db.execSQL(
+                "UPDATE study_plans SET plan_revision_no=plan_revision_no+1, updated=? WHERE id=?",
+                arrayOf<Any>(System.currentTimeMillis(), planId)
+            )
+            bump(planId)
+        }
+
+        checkNotNull(get(planId))
+    }
+
     /** 创建 format_version = 2 计划 */
     fun createV2(plan: ProposedPlan, expectedEpoch: Long = epoch()): Plan = transaction {
         require(epoch() == expectedEpoch) { "资料已清空，本次计划未保存" }
