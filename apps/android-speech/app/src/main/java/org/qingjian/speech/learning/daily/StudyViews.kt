@@ -258,14 +258,18 @@ class StudyViews(private val activity: Activity, private val plans: PlanStore, p
                         override fun afterTextChanged(s: Editable?) = Unit
                     })
 
-                    button(foot, "提交答案", "v2_submit_spelling", "${pendingStage.stageKey}:$inputDraft:$isAssisted")
+                    foot.addView(ui.button("提交答案", true) {
+                        action("v2_submit_spelling", "${pendingStage.stageKey}|$inputDraft|$isAssisted")
+                    }.apply { id = R.id.dailyPrimary })
                 } else {
                     body.addView(ui.text("${item.english} 的常用意思是什么？", 18f))
                     body.addView(speech.button("meaning_q:${item.id}", item.english))
                     body.addView(ui.button(item.meaning) {
-                        action("v2_submit_choice", "${pendingStage.stageKey}:true")
+                        action("v2_submit_choice", "${pendingStage.stageKey}|true")
                     })
-                    button(foot, "完成本题", "v2_submit_choice", "${pendingStage.stageKey}:true")
+                    foot.addView(ui.button("完成本题", true) {
+                        action("v2_submit_choice", "${pendingStage.stageKey}|true")
+                    }.apply { id = R.id.dailyPrimary })
                 }
             }
         }

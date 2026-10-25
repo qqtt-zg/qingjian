@@ -65,9 +65,12 @@ class Store(context: Context) {
         }
 
         fun createRevision(db: SQLiteDatabase) {
-            db.execSQL("ALTER TABLE words ADD COLUMN note_revision INTEGER NOT NULL DEFAULT 0")
+            val cols = db.rawQuery("PRAGMA table_info(words)", null).use { c -> buildSet { while(c.moveToNext()) add(c.getString(1)) } }
+            if ("note_revision" !in cols) {
+                db.execSQL("ALTER TABLE words ADD COLUMN note_revision INTEGER NOT NULL DEFAULT 0")
+            }
             // 同值保存也计入手动编辑，防止改过又清空后被旧请求写回。
-            db.execSQL("CREATE TRIGGER words_note_revision AFTER UPDATE OF meaning ON words BEGIN UPDATE words SET note_revision=note_revision+1 WHERE id=NEW.id; END")
+            db.execSQL("CREATE TRIGGER IF NOT EXISTS words_note_revision AFTER UPDATE OF meaning ON words BEGIN UPDATE words SET note_revision=note_revision+1 WHERE id=NEW.id; END")
         }
     }
 }

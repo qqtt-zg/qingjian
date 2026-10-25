@@ -27,7 +27,15 @@ class StudyActivity : Activity() {
         job=(lastNonConfigurationInstance as? Job) ?: Job(applicationContext, saved?.getLong("plan_id") ?: intent.getLongExtra("plan_id",0).takeIf { it>0 } ?: plans.current()?.id ?: 0)
         revealed=saved?.getBoolean("revealed") ?: false
         job.changed={render()};render()
-        if(saved == null && lastNonConfigurationInstance == null && intent.getBooleanExtra("generate",false) && job.planId==0L) job.start("CREATE")
+        if(saved == null && lastNonConfigurationInstance == null && intent.getBooleanExtra("generate",false) && job.planId==0L) {
+            val localPlan = PlanBuilder.buildAndSave(this)
+            if (localPlan != null) {
+                job.planId = localPlan.id
+                render()
+            } else {
+                job.start("CREATE")
+            }
+        }
     }
 
     override fun onResume() {
@@ -66,7 +74,15 @@ class StudyActivity : Activity() {
             if(p == null) {
                 body.addView(ui.title("让今天的学习\n适合你。"));body.addView(ui.text("老师先读取真实词库与作答，再选择内容。没有足够资料时，会从简单常用表达开始。",14f,true))
                 body.addView(ui.button("AI 设置") {startActivity(Intent(this,SettingsActivity::class.java))})
-                foot.addView(ui.button("安排今天学习",true) {job.start("CREATE")})
+                foot.addView(ui.button("安排今天学习",true) {
+                    val localPlan = PlanBuilder.buildAndSave(this)
+                    if (localPlan != null) {
+                        job.planId = localPlan.id
+                        render()
+                    } else {
+                        job.start("CREATE")
+                    }
+                })
             } else {
                 StudyViews(this,plans,speech) { code,value ->
                     if(plans.get(p.id)?.revision==p.revision)act(code,value)
@@ -123,7 +139,7 @@ class StudyActivity : Activity() {
                     plans.completeStage(value, null, false, activeMs)
                 }
                 "v2_submit_spelling" -> {
-                    val parts = value.split(":", limit = 3)
+                    val parts = value.split("|", limit = 3)
                     val stageKey = parts[0]
                     val answer = parts.getOrNull(1).orEmpty()
                     val assisted = parts.getOrNull(2) == "true"
@@ -139,7 +155,7 @@ class StudyActivity : Activity() {
                     plans.completeStage(stageKey, evtKey, assisted, activeMs)
                 }
                 "v2_submit_choice" -> {
-                    val stageKey = value.substringBefore(":")
+                    val stageKey = value.substringBefore("|")
                     val stage = plans.stages(p.id).first { it.stageKey == stageKey }
                     val item = plans.items(p.id).first { it.id == stage.itemId }
                     val evtKey = "stage:$stageKey"

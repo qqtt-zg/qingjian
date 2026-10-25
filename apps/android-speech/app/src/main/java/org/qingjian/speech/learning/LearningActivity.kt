@@ -89,15 +89,7 @@ class LearningActivity : Activity() {
         val recentMistake=records.asReversed().firstNotNullOfOrNull {e->if(e.getJSONObject("data").has("correct")&&!e.getJSONObject("data").optBoolean("correct"))store.word(e.optLong("word_id"))?.takeIf {it.meaning.isNotBlank()} else null}
         val available=recentMistake ?: store.word(preferences.lastWord)?.takeIf {it.meaning.isNotBlank()} ?: words.firstOrNull {it.meaning.isNotBlank()}
         body.addView(ui.caption("日常输入 · 拼写优先"));body.addView(ui.title("把常用词，\n写得更稳一点。"));body.addView(ui.caption("先巩固用过的词，再慢慢扩展。"))
-        ui.card(body){card->
-            card.background=ui.shape(ui.color(org.qingjian.speech.R.color.hero_background),22)
-            card.addView(ui.caption("继续今天的学习").apply {setTextColor(ui.color(org.qingjian.speech.R.color.hero_secondary))})
-            card.addView(ui.word(available?.english ?: "从一个词开始").apply {textSize=34f;setTextColor(android.graphics.Color.WHITE)})
-            card.addView(ui.text(available?.meaning ?: "先添加词汇和中文笔记，就能开始离线拼写。",14f).apply {setTextColor(ui.color(org.qingjian.speech.R.color.hero_secondary))})
-            val last=records.lastOrNull {it.optLong("word_id")==available?.id&&it.getJSONObject("data").has("correct")}
-            card.addView(ui.caption(if(last==null)"先试着独立回忆，需要时再看提示。" else if(last.getJSONObject("data").optBoolean("assisted"))"上次使用过提示，这次试试独立完成。" else if(last.getJSONObject("data").optBoolean("correct"))"上次独立答对，可以再巩固一次。" else "上次还有拼写错误，今天再练一次。").apply {setTextColor(ui.color(org.qingjian.speech.R.color.hero_secondary))})
-            card.addView(ui.button(if(available==null)"去词库添加" else "开始练拼写",true){if(available==null){page="words";render()}else startActivity(Intent(this,WordStudyActivity::class.java).putExtra("word_id",available.id).putExtra("open_spelling",true))}.apply {background=ui.shape(ui.color(org.qingjian.speech.R.color.hero_text),12);setTextColor(ui.color(org.qingjian.speech.R.color.hero_background))})
-        }
+        org.qingjian.speech.learning.daily.HomeCard.show(this, body)
         body.addView(ui.caption("按自己的节奏来 · 每天 ${preferences.minutes} 分钟"))
         body.addView(ui.menuRow("独立小测", "拼写、听写与语境填词，交卷后看结果", org.qingjian.speech.R.drawable.ic_book) {
             startActivity(Intent(this,org.qingjian.speech.learning.exam.ExamActivity::class.java))
