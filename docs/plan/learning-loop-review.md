@@ -18,7 +18,7 @@
 | 0B 事件与投影 | 3 / 3 | 3 完整 | `EventReader`、`learner_model`、纯函数排程、读时衰减、v11 迁移及 71 项 JVM 测试全部完成 |
 | 1 本机今日计划 | 8 / 8 | 8 完整 | `ContextPack`、`PlanBuilder`、`PlanConstraints`、`gloss_origin`、双源双向查词、防篡改、93 项测试全绿 |
 | 2 模型修订 | 3 / 3 | 3 完整 | `DailyRequestBudget` (≤2请求)、`PlanRevisionEngine` (不可变保护)、单轮图终止、自适应排程与跳过避让全部测试通过 |
-| 3 应用聚合 | 0 / 3 | 0 | 无 |
+| 3 应用聚合 | 3 / 3 | 3 完整 | 30 天滑动窗口应用聚合、独立待练队列拉取与 ACK 确认、安全意图提取与排程提权全部测试通过 |
 
 全仓搜 `EventReader`、`learner_model`、`PlanBuilder`、`ContextPack`、`PlanConstraints`、`plan_revisions`、`gloss_origin`，在 `apps/android-speech/app/src/main` 下零命中。
 

@@ -9,7 +9,7 @@ import java.util.Locale
 import org.qingjian.speech.learning.practice.PracticeStore
 import org.qingjian.speech.learning.oral.AudioFiles
 
-class LearningStore private constructor(private val app: Context) : SQLiteOpenHelper(app, "learning.db", null, 12) {
+class LearningStore private constructor(private val app: Context) : SQLiteOpenHelper(app, "learning.db", null, 13) {
     override fun onCreate(db: SQLiteDatabase) {
         db.execSQL("CREATE TABLE words (id INTEGER PRIMARY KEY AUTOINCREMENT, lookup TEXT NOT NULL UNIQUE, english TEXT NOT NULL, meaning TEXT NOT NULL DEFAULT '', gloss_origin TEXT NOT NULL DEFAULT 'unknown', received INTEGER NOT NULL DEFAULT 0, played INTEGER NOT NULL DEFAULT 0, reviewed INTEGER NOT NULL DEFAULT 0, last_seen INTEGER NOT NULL, note_revision INTEGER NOT NULL DEFAULT 0)")
         org.qingjian.speech.learning.notes.Store.createRevision(db)
@@ -27,6 +27,9 @@ class LearningStore private constructor(private val app: Context) : SQLiteOpenHe
         db.execSQL("CREATE INDEX IF NOT EXISTS learner_due ON learner_model(next_due, state)")
         db.execSQL("CREATE TABLE IF NOT EXISTS user_overrides (word_id INTEGER NOT NULL, dimension TEXT NOT NULL, override_type TEXT NOT NULL, created_at INTEGER NOT NULL, valid_until INTEGER NOT NULL, active INTEGER NOT NULL DEFAULT 1, release_reason TEXT, released_at INTEGER, PRIMARY KEY (word_id, dimension))")
         db.execSQL("CREATE INDEX IF NOT EXISTS user_overrides_active ON user_overrides(active, valid_until)")
+        db.execSQL("CREATE TABLE IF NOT EXISTS study_intents (id INTEGER PRIMARY KEY AUTOINCREMENT, intent_key TEXT NOT NULL UNIQUE, word_id INTEGER NOT NULL DEFAULT 0, english TEXT NOT NULL, target_dimension TEXT NOT NULL DEFAULT '', source TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'pending', created_at INTEGER NOT NULL, expires_at INTEGER NOT NULL, scheduled_plan_id INTEGER NOT NULL DEFAULT 0, consumed_at INTEGER NOT NULL DEFAULT 0, priority INTEGER NOT NULL DEFAULT 0)")
+        db.execSQL("CREATE INDEX IF NOT EXISTS study_intents_status ON study_intents(status, expires_at)")
+        db.execSQL("CREATE INDEX IF NOT EXISTS study_intents_word ON study_intents(word_id)")
     }
 
     override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) {
@@ -104,6 +107,11 @@ class LearningStore private constructor(private val app: Context) : SQLiteOpenHe
                 db.execSQL("ALTER TABLE words ADD COLUMN gloss_origin TEXT NOT NULL DEFAULT 'unknown'")
                 db.execSQL("UPDATE words SET gloss_origin='desktop-vocab' WHERE id IN (SELECT word_id FROM desktop_sources)")
             }
+        }
+        if(oldVersion < 13) {
+            db.execSQL("CREATE TABLE IF NOT EXISTS study_intents (id INTEGER PRIMARY KEY AUTOINCREMENT, intent_key TEXT NOT NULL UNIQUE, word_id INTEGER NOT NULL DEFAULT 0, english TEXT NOT NULL, target_dimension TEXT NOT NULL DEFAULT '', source TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'pending', created_at INTEGER NOT NULL, expires_at INTEGER NOT NULL, scheduled_plan_id INTEGER NOT NULL DEFAULT 0, consumed_at INTEGER NOT NULL DEFAULT 0, priority INTEGER NOT NULL DEFAULT 0)")
+            db.execSQL("CREATE INDEX IF NOT EXISTS study_intents_status ON study_intents(status, expires_at)")
+            db.execSQL("CREATE INDEX IF NOT EXISTS study_intents_word ON study_intents(word_id)")
         }
     }
 
@@ -216,7 +224,7 @@ class LearningStore private constructor(private val app: Context) : SQLiteOpenHe
         val db = writableDatabase
         db.beginTransaction()
         try {
-            for(table in listOf("learning_events","independent_exams","learner_memory","ai_usage","history_analysis","desktop_sources","learner_model","user_overrides"))db.delete(table,null,null)
+            for(table in listOf("learning_events","independent_exams","learner_memory","ai_usage","history_analysis","desktop_sources","learner_model","user_overrides","study_intents"))db.delete(table,null,null)
             db.execSQL("UPDATE archive_meta SET revision=revision+1 WHERE id=1")
             db.delete("word_materials", null, null)
             db.delete("oral_assessments",null,null);db.delete("word_workspaces",null,null)

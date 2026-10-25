@@ -141,7 +141,7 @@ object PlanBuilder {
         val dueCount = picked.count { it.reasonCode.startsWith("due") }
         val weakCount = picked.count { it.reasonCode.startsWith("weak") }
         val finalFreshCount = picked.count { it.reasonCode.startsWith("fresh") }
-        val consCount = picked.count { it.reasonCode.startsWith("consolidate") }
+        val consCount = picked.count { it.reasonCode.startsWith("consolidate") || it.reasonCode.startsWith("intent") }
 
         val reasonSummary = buildString {
             append("根据你的作答记录与记忆曲线，安排了 ")
@@ -165,7 +165,8 @@ object PlanBuilder {
 
     private fun sortDuePool(due: List<CandidateWord>): List<CandidateWord> {
         return due.sortedWith(
-            compareByDescending<CandidateWord> { it.dimensions.maxOfOrNull { d -> d.overdueDays } ?: 0.0 }
+            compareByDescending<CandidateWord> { it.intent != null }
+                .thenByDescending { it.dimensions.maxOfOrNull { d -> d.overdueDays } ?: 0.0 }
                 .thenBy { it.dimensions.minOfOrNull { d -> stateRank(d.state) } ?: 99 }
                 .thenBy { it.dimensions.mapNotNull { d -> d.lastAt }.minOrNull() ?: 0L }
                 .thenBy { it.wordId }
@@ -174,7 +175,8 @@ object PlanBuilder {
 
     private fun sortWeakPool(weak: List<CandidateWord>): List<CandidateWord> {
         return weak.sortedWith(
-            compareByDescending<CandidateWord> { it.dimensions.sumOf { d -> d.recentErrors } }
+            compareByDescending<CandidateWord> { it.intent != null }
+                .thenByDescending { it.dimensions.sumOf { d -> d.recentErrors } }
                 .thenByDescending { it.dimensions.sumOf { d -> d.assistedCount } }
                 .thenBy { it.wordId }
         )
@@ -182,7 +184,8 @@ object PlanBuilder {
 
     private fun sortFreshPool(fresh: List<CandidateWord>): List<CandidateWord> {
         return fresh.sortedWith(
-            compareByDescending<CandidateWord> { it.baseScore }
+            compareByDescending<CandidateWord> { it.intent != null }
+                .thenByDescending { it.baseScore }
                 .thenBy { it.length }
                 .thenBy { it.wordId }
         )
@@ -190,7 +193,8 @@ object PlanBuilder {
 
     private fun sortConsolidatePool(consolidate: List<CandidateWord>): List<CandidateWord> {
         return consolidate.sortedWith(
-            compareBy<CandidateWord> { it.dimensions.mapNotNull { d -> d.effectiveDue }.minOrNull() ?: Long.MAX_VALUE }
+            compareByDescending<CandidateWord> { it.intent != null }
+                .thenBy { it.dimensions.mapNotNull { d -> d.effectiveDue }.minOrNull() ?: Long.MAX_VALUE }
                 .thenBy { it.wordId }
         )
     }
@@ -255,6 +259,7 @@ object PlanBuilder {
         val isShakyDecay = sortedDims.any { it.state == "shaky" && it.overdueDays >= 30.0 }
 
         val (reasonCode, reasonText) = when {
+            cand.intent != null -> "due_intent" to "根据你的待练意向，优先安排到期复习"
             isSolidDecay -> "due_decay_solid" to "掌握已超过 60 天未检验，安排抽测自评"
             isShakyDecay -> "due_decay_shaky" to "掌握不够稳固，提前安排复习"
             maxOverdue >= 1.0 -> "due_overdue" to "已逾期 ${maxOverdue.toInt()} 天，需要及时巩固"
@@ -305,14 +310,19 @@ object PlanBuilder {
         }
 
         val errors = sortedDims.firstOrNull()?.recentErrors ?: 1
+        val (reasonCode, reasonText) = if (cand.intent != null) {
+            "weak_intent" to "根据你的待练意向，针对薄弱项专项强化"
+        } else {
+            "weak_error" to "近期出现 $errors 次错误，针对性巩固练习"
+        }
         return ProposedItem(
             wordId = cand.wordId,
             english = cand.english,
             meaning = cand.meaning,
             example = "",
             translation = "",
-            reasonCode = "weak_error",
-            reasonText = "近期出现 $errors 次错误，针对性巩固练习",
+            reasonCode = reasonCode,
+            reasonText = reasonText,
             stages = listOf(stage)
         )
     }
@@ -329,10 +339,10 @@ object PlanBuilder {
             stages.add(ProposedStage("PRACTICE_BASIC", EventDimension.SPELLING.key, PlanConstraints.CREDIT_PRACTICE_BASIC))
         }
 
-        val (reasonCode, reasonText) = if (cand.desktopCommitted > 0) {
-            "fresh_desktop" to "电脑端已输入 ${cand.desktopCommitted} 次，首次在手机学习"
-        } else {
-            "fresh_new" to "新加入词库，开始初次系统学习"
+        val (reasonCode, reasonText) = when {
+            cand.intent != null -> "fresh_intent" to "根据你的待练意向，开始首次新词学习"
+            cand.desktopCommitted > 0 -> "fresh_desktop" to "电脑端已输入 ${cand.desktopCommitted} 次，首次在手机学习"
+            else -> "fresh_new" to "新加入词库，开始初次系统学习"
         }
 
         return ProposedItem(
@@ -350,14 +360,19 @@ object PlanBuilder {
     /** 组装 Consolidate 词条环节与理由 */
     private fun assembleConsolidateItem(cand: CandidateWord, material: MaterialStatus?): ProposedItem {
         val stage = ProposedStage("CONSOLIDATE_PRACTICE", EventDimension.MEANING.key, PlanConstraints.CREDIT_CONSOLIDATE_PRACTICE)
+        val (reasonCode, reasonText) = if (cand.intent != null) {
+            "intent_prompted" to "响应你的待练意向，安排快速抽测温故知新"
+        } else {
+            "consolidate_soon" to "掌握良好，提前进行日常保温练习"
+        }
         return ProposedItem(
             wordId = cand.wordId,
             english = cand.english,
             meaning = cand.meaning,
             example = "",
             translation = "",
-            reasonCode = "consolidate_soon",
-            reasonText = "掌握良好，提前进行日常保温练习",
+            reasonCode = reasonCode,
+            reasonText = reasonText,
             stages = listOf(stage)
         )
     }
@@ -375,21 +390,24 @@ object PlanBuilder {
     fun assembleCandidatePools(
         words: List<VocabularyEntry>,
         learnerEntries: List<LearnerModelEntry>,
-        overrides: Map<Pair<Long, String>, UserOverride>,
+        overrides: Map<Pair<Long, String>, UserOverride> = emptyMap(),
         desktopCommittedMap: Map<Long, Int> = emptyMap(),
         skipHistories: Map<Long, SkipHistory> = emptyMap(),
+        activeIntents: List<org.qingjian.speech.learning.intent.StudyIntent> = emptyList(),
         nowMillis: Long = System.currentTimeMillis()
     ): CandidatePools {
         val entriesByWord = learnerEntries.groupBy { it.wordId }
+        val intentsByWord = activeIntents.associateBy { it.wordId }
         val dueList = mutableListOf<CandidateWord>()
         val weakList = mutableListOf<CandidateWord>()
         val freshList = mutableListOf<CandidateWord>()
         val consolidateList = mutableListOf<CandidateWord>()
 
         for (word in words) {
+            val wordIntent = intentsByWord[word.id]
             val skip = skipHistories[word.id]
-            // 连续 3 天跳过：本周内从自动排程池中彻底排除（用户显式指定除外）
-            if (skip != null && skip.consecutiveSkipDays >= 3) {
+            // 连续 3 天跳过：本周内从自动排程池中彻底排除（用户显式指定待练意图除外）
+            if (skip != null && skip.consecutiveSkipDays >= 3 && wordIntent == null) {
                 continue
             }
             val entries = entriesByWord[word.id].orEmpty()
@@ -427,7 +445,8 @@ object PlanBuilder {
                 desktopLastSeenMillis = word.lastSeen,
                 desktopKnown = false,
                 phoneErrorRate = errorRate,
-                baseScore = baseScore
+                baseScore = baseScore,
+                intent = wordIntent
             )
 
             val hasDue = dimensions.any { it.effectiveDue != null && it.effectiveDue <= nowMillis }
@@ -438,7 +457,9 @@ object PlanBuilder {
             when {
                 hasDue -> dueList.add(cand)
                 isWeak -> weakList.add(cand)
+                wordIntent != null && isAllUnknown -> freshList.add(cand)
                 isAllUnknown && word.meaning.isNotBlank() -> freshList.add(cand)
+                wordIntent != null -> consolidateList.add(cand)
                 isConsolidate -> consolidateList.add(cand)
             }
         }

@@ -156,6 +156,16 @@ class SpeechHandler(BaseHTTPRequestHandler):
             except (OSError, ValueError):
                 self.reply(503, {"error": "电脑生词来源暂不可用"})
             return
+        if request.path == "/api/learning/intents":
+            if not self.authenticated(): return
+            try:
+                if not self.server.state.learning:
+                    self.reply(503, {"error": "学习同步未启用"})
+                else:
+                    self.reply(200, self.server.state.learning.intents())
+            except (OSError, ValueError):
+                self.reply(503, {"error": "待练队列暂不可用"})
+            return
         if request.path.startswith("/api/notes/"):
             if not self.notes_allowed(): return
             try:
@@ -318,6 +328,39 @@ class SpeechHandler(BaseHTTPRequestHandler):
                 self.reply(200, self.server.state.learning.backup(data))
             except (OSError, ValueError, UnicodeDecodeError):
                 self.reply(400, {"error": "学习备份未保存，请检查格式和电脑空间"})
+            return
+        if path == "/api/learning/intents/ack":
+            if not self.authenticated(): return
+            try:
+                length = int(self.headers.get("Content-Length", "0"))
+                if self.headers.get_content_type() != "application/json" or not 1 <= length <= 32768:
+                    raise ValueError("ACK 请求格式或长度无效")
+                if not self.server.state.learning:
+                    self.reply(503, {"error": "请更新电脑连接工具"})
+                    return
+                body = json.loads(self.read_body(length).decode("utf-8"))
+                if not isinstance(body, dict) or "acked_ids" not in body or not isinstance(body["acked_ids"], list):
+                    raise ValueError("ACK 字段无效")
+                self.reply(200, self.server.state.learning.ack_intents(body["acked_ids"]))
+            except (OSError, ValueError, UnicodeDecodeError) as e:
+                self.reply(400, {"error": f"确认回执处理失败: {e}"})
+            return
+        if path == "/api/admin/intents":
+            if not self.local_admin(): return
+            try:
+                body = self.json_body()
+                english = str(body.get("english", "")).strip()
+                if not 1 <= len(english) <= 100:
+                    raise ValueError("英文词条长度必须在 1 到 100 字符")
+                meaning = str(body.get("meaning", ""))[:500]
+                dimension = str(body.get("dimension", ""))[:50]
+                if not self.server.state.learning:
+                    self.reply(503, {"error": "学习功能未初始化"})
+                    return
+                res = self.server.state.learning.add_intent(english, meaning, dimension, source="desktop")
+                self.reply(200, res)
+            except (OSError, ValueError) as e:
+                self.reply(400, {"error": str(e)})
             return
         if path == "/api/notes":
             if not self.notes_allowed(): return

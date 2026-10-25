@@ -66,9 +66,11 @@ def encoded_size(value):
 
 
 class LearningSync:
-    def __init__(self, root, vocabulary):
+    def __init__(self, root, vocabulary, app_events=None, intents_file=None):
         self.root = Path(root)
         self.vocabulary = Path(vocabulary)
+        self.app_events = Path(app_events) if app_events else (self.root / "learning-app-events.json")
+        self.intents_file = Path(intents_file) if intents_file else (self.root / "learning-intents.json")
         self.lock = threading.Lock()
 
     def _read_rows(self):
@@ -192,7 +194,55 @@ class LearningSync:
         rows, invalid_dates = self._read_rows()
         today = datetime.now().astimezone().date()
         floor = today - timedelta(days=days)
-        inside = [row for row in rows if parse_day(row["last"]) >= floor]
+        inside = []
+        for row in rows:
+            p_day = parse_day(row["last"])
+            if p_day is not None and p_day >= floor:
+                inside.append(row)
+
+        # 检查应用日聚合统计（30 天滑动窗口）
+        app_stats_by_word = {}
+        if self.app_events.is_file():
+            try:
+                app_data = json.loads(self.app_events.read_text(encoding="utf-8"))
+                if not app_data.get("enabled", True):
+                    envelope["apps_status"] = "disabled"
+                else:
+                    envelope["apps_status"] = "collected"
+                    records = app_data.get("records", {})
+                    for date_str, word_map in records.items():
+                        day_obj = parse_day(date_str)
+                        if day_obj is not None and day_obj >= floor:
+                            for word_key, app_counts in word_map.items():
+                                if word_key not in app_stats_by_word:
+                                    app_stats_by_word[word_key] = {}
+                                for raw_app, counts in app_counts.items():
+                                    clean_app = os.path.basename(raw_app)[:64]
+                                    if clean_app not in app_stats_by_word[word_key]:
+                                        app_stats_by_word[word_key][clean_app] = [0, 0]
+                                    app_stats_by_word[word_key][clean_app][0] += counts[0]
+                                    app_stats_by_word[word_key][clean_app][1] += counts[1]
+            except (ValueError, OSError):
+                envelope["apps_status"] = "not_collected"
+        else:
+            envelope["apps_status"] = "not_collected"
+
+        # 关联词汇应用聚合信息（前 3 名 + other）
+        for row in inside:
+            w_key = f"{row['language']}:{row['english']}"
+            if w_key in app_stats_by_word and app_stats_by_word[w_key]:
+                sorted_apps = sorted(app_stats_by_word[w_key].items(), key=lambda p: (-(p[1][0] + p[1][1]), p[0]))
+                apps_list = []
+                for app_name, (c, u) in sorted_apps[:3]:
+                    apps_list.append({"app": app_name, "commit_with_gloss": c, "gloss_typed": u})
+                if len(sorted_apps) > 3:
+                    other_c = sum(p[1][0] for p in sorted_apps[3:])
+                    other_u = sum(p[1][1] for p in sorted_apps[3:])
+                    apps_list.append({"app": "other", "commit_with_gloss": other_c, "gloss_typed": other_u})
+                row["apps"] = apps_list
+            else:
+                row["apps"] = None
+
         # 稳定排序：上屏多的在前，同数按语言、词排。截断时也按这个顺序，留下的总是更相关的。
         inside.sort(key=lambda row: (-row["committed"], row["language"], row["english"]))
         envelope["total"] = len(inside)
@@ -250,7 +300,14 @@ class LearningSync:
     def backup(self, data):
         if not isinstance(data, dict) or set(data) != {"schema", "created", "tables"} or data["schema"] != 1:
             raise ValueError("学习备份格式无效")
-        allowed = {"words", "word_materials", "messages", "conversations", "learning_actions", "word_workspaces", "oral_recordings", "quiz_attempts", "oral_assessments", "learning_events", "independent_exams", "learner_memory", "ai_usage", "study_plans", "study_items", "study_questions", "study_reviews", "desktop_sources", "learner_model", "user_overrides", "study_item_stages", "plan_revisions"}
+        allowed = {
+            "words", "word_materials", "messages", "conversations", "learning_actions",
+            "word_workspaces", "oral_recordings", "quiz_attempts", "oral_assessments",
+            "learning_events", "independent_exams", "learner_memory", "ai_usage",
+            "study_plans", "study_items", "study_questions", "study_reviews",
+            "desktop_sources", "learner_model", "user_overrides", "study_item_stages",
+            "plan_revisions", "study_intents"
+        }
         if not isinstance(data["tables"], dict) or not set(data["tables"]) <= allowed:
             raise ValueError("备份包含不支持的配置")
         for rows in data["tables"].values():
@@ -271,3 +328,84 @@ class LearningSync:
                 os.replace(target, self.root / "phone-learning-previous.json")
             os.replace(temporary, target)
         return {"ok": True, "bytes": len(body)}
+
+    def intents(self, now_millis=None):
+        """读取未过期的待练意图列表。"""
+        if now_millis is None:
+            now_millis = int(datetime.now().timestamp() * 1000)
+        with self.lock:
+            if not self.intents_file.is_file():
+                return {"schema": 1, "generated_at": local_now(), "total": 0, "intents": []}
+            try:
+                data = json.loads(self.intents_file.read_text(encoding="utf-8"))
+                items = data.get("intents", []) if isinstance(data, dict) else []
+            except (ValueError, OSError):
+                return {"schema": 1, "generated_at": local_now(), "total": 0, "intents": []}
+            valid = [
+                item for item in items
+                if isinstance(item, dict) and item.get("expires_at", 0) > now_millis
+            ]
+            return {"schema": 1, "generated_at": local_now(), "total": len(valid), "intents": valid}
+
+    def add_intent(self, english, meaning="", dimension="", source="desktop", intent_id=None, created_at=None, expires_at=None):
+        """向待练队列添加意图，按 ID 或 (english, source) 幂等去重。"""
+        english = english.strip()
+        if not 1 <= len(english) <= 100:
+            raise ValueError("英文词条长度必须在 1 到 100 字符")
+        now = int(datetime.now().timestamp() * 1000)
+        created = created_at or now
+        expires = expires_at or (created + 30 * 86400 * 1000)
+        iid = intent_id or f"desktop:{created}:{english.lower()}"
+
+        with self.lock:
+            self.root.mkdir(parents=True, exist_ok=True)
+            items = []
+            if self.intents_file.is_file():
+                try:
+                    data = json.loads(self.intents_file.read_text(encoding="utf-8"))
+                    items = data.get("intents", []) if isinstance(data, dict) else []
+                except (ValueError, OSError):
+                    items = []
+            if any(it.get("id") == iid for it in items):
+                return {"ok": True, "id": iid, "status": "existing"}
+
+            new_intent = {
+                "id": iid,
+                "english": english,
+                "meaning": meaning[:500],
+                "dimension": dimension[:50],
+                "source": source,
+                "created_at": created,
+                "expires_at": expires
+            }
+            items.append(new_intent)
+            self._write_intents(items)
+            return {"ok": True, "id": iid, "status": "added"}
+
+    def ack_intents(self, acked_ids):
+        """确认已拉取落库的意图 ID，将其从活动队列中移出。严格幂等。"""
+        if not isinstance(acked_ids, list):
+            raise ValueError("acked_ids 必须是列表")
+        acked_set = {str(x) for x in acked_ids}
+        with self.lock:
+            if not self.intents_file.is_file():
+                return {"ok": True, "acked_count": 0}
+            try:
+                data = json.loads(self.intents_file.read_text(encoding="utf-8"))
+                items = data.get("intents", []) if isinstance(data, dict) else []
+            except (ValueError, OSError):
+                return {"ok": True, "acked_count": 0}
+
+            remaining = [it for it in items if it.get("id") not in acked_set]
+            removed_count = len(items) - len(remaining)
+            self._write_intents(remaining)
+            return {"ok": True, "acked_count": removed_count}
+
+    def _write_intents(self, items):
+        temporary = self.intents_file.with_suffix(".tmp")
+        payload = json.dumps({"schema": 1, "intents": items}, ensure_ascii=False, indent=2).encode("utf-8")
+        with temporary.open("wb") as stream:
+            stream.write(payload)
+            stream.flush()
+            os.fsync(stream.fileno())
+        os.replace(temporary, self.intents_file)

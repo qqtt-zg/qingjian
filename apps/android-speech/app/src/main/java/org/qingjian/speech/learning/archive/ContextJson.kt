@@ -18,6 +18,18 @@ object ContextJson {
             val row = rows.optJSONObject(index) ?: continue
             val english = row.optString("english")
             if (english.isEmpty()) continue
+            val appsArr = row.optJSONArray("apps")
+            val appUsageList = if (appsArr != null) {
+                (0 until appsArr.length()).mapNotNull { i ->
+                    val appObj = appsArr.optJSONObject(i) ?: return@mapNotNull null
+                    DesktopAppUsage(
+                        app = appObj.optString("app").take(64),
+                        commitWithGloss = appObj.optInt("commit_with_gloss", 0),
+                        glossTyped = appObj.optInt("gloss_typed", 0)
+                    )
+                }
+            } else null
+
             words += DesktopWord(
                 english = english,
                 meaning = row.optString("origin_text"),
@@ -25,6 +37,7 @@ object ContextJson {
                 lastSeenMillis = ContextParse.isoDateToMillis(row.optString("last")),
                 desktopKnown = row.optBoolean("desktop_known"),
                 payload = row.toString(),
+                apps = appUsageList
             )
         }
         return DesktopContext(
@@ -35,6 +48,7 @@ object ContextJson {
             glossesTruncated = response.optBoolean("glosses_truncated"),
             truncated = response.optBoolean("truncated"),
             source = DesktopContext.Source.CONTEXT,
+            appsStatus = response.optString("apps_status", "not_collected")
         )
     }
 

@@ -10,6 +10,12 @@ import java.time.ZoneOffset
 import java.time.format.DateTimeParseException
 import org.qingjian.speech.learning.glossary.PersonalGloss
 
+data class DesktopAppUsage(
+    val app: String,
+    val commitWithGloss: Int,
+    val glossTyped: Int
+)
+
 /** 一条电脑来源词条，两个接口都归到这个形状。`payload` 是原始 JSON，整条存进 desktop_sources。 */
 class DesktopWord(
     val english: String,
@@ -18,6 +24,7 @@ class DesktopWord(
     val lastSeenMillis: Long,
     val desktopKnown: Boolean,
     val payload: String,
+    val apps: List<DesktopAppUsage>? = null
 )
 
 /**
@@ -33,6 +40,7 @@ class DesktopContext(
     val glossesTruncated: Boolean,
     val truncated: Boolean,
     val source: Source,
+    val appsStatus: String = "not_collected"
 ) {
     enum class Source { CONTEXT, LEGACY_WORDS }
 }

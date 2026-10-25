@@ -65,10 +65,10 @@
 
 ### 阶段3：可选应用聚合与跨端意图
 
-- [ ] 基于有直接关联的译词日聚合补应用分布；不推断历史无关联记录。
-- [ ] 用户明确表达“想练X”时保存待练意图，带来源、去重键和过期时间。
-- [ ] 电脑“加入手机待练”需独立的电脑到手机拉取队列与确认，不能反用手机上传备份接口。
-- 验收：应用采集开关、30日过期、重启去重、来源未知；意图不重复消费、离线排队、清空后不复活。仅识别文字意图不赋予任意修改偏好或成绩的权限。
+- [x] 基于有直接关联的译词日聚合补应用分布；不推断历史无关联记录（`tools/speech-relay/learning_sync.py` 实现 30 天滑动窗口计算，前 3 名应用 + other 汇总结算；`ContextJson.kt` 解析 `apps_status` 与 `apps` 数组；不推断历史无关联记录）。
+- [x] 用户明确表达“想练X”时保存待练意图，带来源、去重键和过期时间（`StudyIntentStore.kt`、`TextIntentExtractor.kt` 支持提取并推导维度，具备最小权限沙箱防篡改保护；去重键按日分桶、30 天过期自动淘汰）。
+- [x] 电脑“加入手机待练”需独立的电脑到手机拉取队列与确认，不能反用手机上传备份接口（`server.py` 与 `learning_sync.py` 提供独立 `GET /api/learning/intents` 与 `POST /api/learning/intents/ack`；`Transfer.kt:pullAndAckIntents` 独立完成拉取与回执；备份白名单扩充至 23 张表）。
+- 验收：应用采集开关、30日过期、重启去重、来源未知；意图不重复消费、离线排队、清空后不复活。仅识别文字意图不赋予任意修改偏好或成绩的权限（Python 70 单元测试全绿；Android `PlanBuilderIntentTest`、`TextIntentExtractorTest`、`TransferIntentTest` 等共 130 项 JVM 单元测试全绿；`MigrationProbe` 升级覆盖 v1..v12 升 v13）。
 
 ## 九、发布边界与仍可后置的工作
 

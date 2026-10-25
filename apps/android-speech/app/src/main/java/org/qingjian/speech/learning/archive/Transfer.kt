@@ -57,6 +57,9 @@ object Transfer {
                 val pulled = runCatching { pull(app, prefs, pair, run) }
                 if (pulled.isFailure) sourceProblem = pulled.exceptionOrNull()?.message ?: "电脑来源同步失败"
 
+                // 第 1.5 步：拉取待练意图并确认。失败独立隔离，不影响来源与备份。
+                val intents = runCatching { pullAndAckIntents(app, pair, run) }
+
                 // 第二步：导出并上传备份。失败不影响来源，也不清掉上次备份记录。
                 val backup = runCatching { backup(app, prefs, pair, epoch, manual, run) }
                 if (backup.isFailure) backupProblem = backup.exceptionOrNull()?.message ?: "学习档案备份失败"
@@ -171,7 +174,8 @@ object Transfer {
                 "words", "word_materials", "messages", "conversations", "learning_actions", "word_workspaces",
                 "oral_recordings", "quiz_attempts", "oral_assessments", "learning_events", "independent_exams",
                 "learner_memory", "ai_usage", "study_plans", "study_items", "study_questions", "study_reviews",
-                "desktop_sources", "learner_model", "user_overrides", "study_item_stages", "plan_revisions"
+                "desktop_sources", "learner_model", "user_overrides", "study_item_stages", "plan_revisions",
+                "study_intents"
             )) {
                 val rows = JSONArray()
                 db.rawQuery("SELECT * FROM $table", null).use { c ->
@@ -193,6 +197,50 @@ object Transfer {
             db.endTransaction()
         }
         return JSONObject().put("schema", 1).put("created", System.currentTimeMillis()).put("tables", tables)
+    }
+
+    /** 拉取待练意图并提交确认。404 表示电脑端为旧版，静默跳过。失败独立抛出供隔离捕获。 */
+    fun pullAndAckIntents(app: Context, pair: Pairing, run: Long): Int {
+        val data = try {
+            request(pair, "/api/learning/intents", run = run)
+        } catch (error: HttpStatusException) {
+            if (error.status == 404) return 0
+            throw error
+        }
+        val arr = data.optJSONArray("intents") ?: return 0
+        if (arr.length() == 0) return 0
+
+        val intentStore = org.qingjian.speech.learning.intent.StudyIntentStore(app)
+        val ackedIds = mutableListOf<String>()
+
+        for (i in 0 until arr.length()) {
+            val item = arr.getJSONObject(i)
+            val iid = item.getString("id")
+            val english = item.getString("english")
+            val dimension = item.optString("dimension")
+            val source = item.optString("source", "desktop")
+            val createdAt = item.optLong("created_at", System.currentTimeMillis())
+            val expiresAt = item.optLong("expires_at", System.currentTimeMillis() + 30L * 86400000L)
+
+            intentStore.saveIntent(
+                english = english,
+                dimension = dimension,
+                source = source,
+                intentKey = "desktop:$iid",
+                createdAt = createdAt,
+                expiresAt = expiresAt
+            )
+            ackedIds.add(iid)
+        }
+
+        if (ackedIds.isNotEmpty()) {
+            val ackBody = JSONObject().apply {
+                put("schema", 1)
+                put("acked_ids", JSONArray(ackedIds))
+            }.toString().toByteArray(Charsets.UTF_8)
+            request(pair, "/api/learning/intents/ack", ackBody, run)
+        }
+        return ackedIds.size
     }
 
     /** 非 200 的状态码要能区分 404 与其它，回退逻辑才写得出来。 */

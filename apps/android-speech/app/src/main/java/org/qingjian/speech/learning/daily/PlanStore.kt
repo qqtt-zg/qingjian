@@ -302,15 +302,16 @@ class PlanStore(private val app: Context) {
     /** 环节推进完成 */
     fun completeStage(stageKey: String, eventKey: String?, assisted: Boolean, activeMs: Long) = transaction {
         val stage = db.rawQuery(
-            "SELECT plan_id, credit, status FROM study_item_stages WHERE stage_key=?",
+            "SELECT plan_id, credit, status, word_id FROM study_item_stages WHERE stage_key=?",
             arrayOf(stageKey)
         ).use { c ->
-            if (c.moveToFirst()) Triple(c.getLong(0), c.getInt(1), c.getString(2)) else null
+            if (c.moveToFirst()) Tuple4(c.getLong(0), c.getInt(1), c.getString(2), c.getLong(3)) else null
         } ?: error("环节不存在")
-        require(stage.third == "pending") { "环节已非 pending 状态" }
+        require(stage.status == "pending") { "环节已非 pending 状态" }
 
-        val planId = stage.first
-        val credit = stage.second
+        val planId = stage.planId
+        val credit = stage.credit
+        val wordId = stage.wordId
 
         db.execSQL(
             "UPDATE study_item_stages SET status='done', result_event_key=?, assisted=?, active_ms=active_ms+?, updated=? WHERE stage_key=?",
@@ -321,6 +322,9 @@ class PlanStore(private val app: Context) {
             arrayOf<Any>(credit, activeMs, System.currentTimeMillis(), planId)
         )
 
+        // 标记该词关联的待练意图已消费
+        org.qingjian.speech.learning.intent.StudyIntentStore(app).markConsumed(wordId)
+
         val remaining = db.rawQuery(
             "SELECT COUNT(1) FROM study_item_stages WHERE plan_id=? AND status='pending'",
             arrayOf(planId.toString())
@@ -330,6 +334,8 @@ class PlanStore(private val app: Context) {
         }
         bump(planId)
     }
+
+    private data class Tuple4<A, B, C, D>(val planId: A, val credit: B, val status: C, val wordId: D)
 
     /** 跳过环节 */
     fun skipStage(stageKey: String) = transaction {
@@ -637,6 +643,13 @@ class PlanStore(private val app: Context) {
                 }
                 db.insertOrThrow("study_item_stages", null, stageValues)
             }
+        }
+
+        val intentStore = org.qingjian.speech.learning.intent.StudyIntentStore(app)
+        val chosenWordIds = plan.items.map { it.wordId }.toSet()
+        val activeIntents = intentStore.getActiveIntents().filter { it.wordId in chosenWordIds }
+        if (activeIntents.isNotEmpty()) {
+            intentStore.markScheduled(activeIntents.map { it.id }, planId)
         }
 
         checkNotNull(get(planId))

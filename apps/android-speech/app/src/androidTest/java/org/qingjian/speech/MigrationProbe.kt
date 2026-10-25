@@ -1,4 +1,4 @@
-//! 仅用于隔离模拟器：验证 v1～v11 升级到 v12 保留词汇、笔记、旧录音与会话目录，并就绪模型投影表与来源。
+//! 仅用于隔离模拟器：验证 v1～v12 升级到 v13 保留词汇、笔记、旧录音与会话目录，并就绪模型投影表与意图表。
 package org.qingjian.speech
 
 import android.app.Instrumentation
@@ -10,7 +10,7 @@ import org.qingjian.speech.learning.quiz.Kind
 object MigrationProbe {
     fun run(test: Instrumentation): String {
         val app = test.targetContext
-        for(version in 1..11) {
+        for(version in 1..12) {
             app.deleteDatabase("learning.db")
             val path = app.getDatabasePath("learning.db"); path.parentFile!!.mkdirs()
             SQLiteDatabase.openOrCreateDatabase(path, null).use { db ->
@@ -45,7 +45,7 @@ object MigrationProbe {
             val prefs = app.getSharedPreferences("speech", 0)
             prefs.edit().putInt("voice", 7).putInt("rate_percent", 125).commit()
             val store = LearningStore.get(app)
-            check(store.readableDatabase.version == 12)
+            check(store.readableDatabase.version == 13)
             if(version>=2)check(PracticeStore(app).recordings(1).single().let {it.reference=="Control" && it.mode=="word" && it.rating=="again"})
             check(org.qingjian.speech.learning.assessment.Store(app).facts().getJSONArray("recent_assessments").length()==0)
             val notes=org.qingjian.speech.learning.notes.Store(app)
@@ -62,6 +62,10 @@ object MigrationProbe {
             check(store.messages("word:1").single().text == "旧版已保存的解释")
             check(PracticeStore(app).summary(Kind.CHOICE).first == if(version >= 2) 1 else 0)
             check(prefs.getInt("voice", -1) == 7 && prefs.getInt("rate_percent", -1) == 125)
+            val intentCols = store.readableDatabase.rawQuery("PRAGMA table_info(study_intents)", null).use { c ->
+                buildSet { while(c.moveToNext()) add(c.getString(1)) }
+            }
+            check("intent_key" in intentCols && "english" in intentCols)
             val previous = store.question("general", "旧问题")
             store.clearMessages("general")
             val next = store.question("general", "新问题")
@@ -73,6 +77,6 @@ object MigrationProbe {
             check(store.addWord("new-word") > deletedWord)
             store.close()
         }
-        return "PASS schema v1-v11 to v12: words/notes/counters/chats/preferences/quiz retained, legacy recording reference/mode backfilled without fabricated assessments, material table and note revision retained, monotonic IDs, v12 gloss_origin ready"
+        return "PASS schema v1-v12 to v13: words/notes/counters/chats/preferences/quiz retained, legacy recording reference/mode backfilled without fabricated assessments, material table and note revision retained, monotonic IDs, v12 gloss_origin ready, v13 study_intents ready"
     }
 }

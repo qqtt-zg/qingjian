@@ -26,7 +26,8 @@ data class CandidateWord(
     val desktopKnown: Boolean = false,
     val phoneErrorRate: Double? = null,
     val baseScore: Double = 0.0,
-    val length: Int = english.length
+    val length: Int = english.length,
+    val intent: org.qingjian.speech.learning.intent.StudyIntent? = null
 )
 
 data class SkipHistory(
@@ -82,7 +83,8 @@ data class ContextPack(
     val budget: BudgetSnapshot,
     val candidates: CandidatePools,
     val materials: Map<Long, MaterialStatus> = emptyMap(),
-    val totalWords: Int = 0
+    val totalWords: Int = 0,
+    val activeIntents: List<org.qingjian.speech.learning.intent.StudyIntent> = emptyList()
 ) {
     companion object {
         const val DAY_MILLIS = 86400000.0
@@ -173,7 +175,17 @@ data class ContextPack(
             }
             val overrides = learnerStore.activeOverrides()
             val skipHistories = plans.skippedWordsHistory(7)
-            val pools = PlanBuilder.assembleCandidatePools(words, allEntries, overrides, emptyMap(), skipHistories, nowMillis)
+            val intentStore = org.qingjian.speech.learning.intent.StudyIntentStore(context)
+            val activeIntents = intentStore.getActiveIntents(nowMillis)
+            val pools = PlanBuilder.assembleCandidatePools(
+                words = words,
+                learnerEntries = allEntries,
+                overrides = overrides,
+                desktopCommittedMap = emptyMap(),
+                skipHistories = skipHistories,
+                activeIntents = activeIntents,
+                nowMillis = nowMillis
+            )
             val (factor, factorReason) = deriveFactor(plans.recentHistory(), prefs.revision)
             val usable = PlanConstraints.calculateUsableCredit(prefs.minutes, factor)
 
@@ -186,7 +198,8 @@ data class ContextPack(
                 budget = BudgetSnapshot(prefs.minutes, factor, factorReason, usable),
                 candidates = pools,
                 materials = emptyMap(),
-                totalWords = words.size
+                totalWords = words.size,
+                activeIntents = activeIntents
             )
         }
     }

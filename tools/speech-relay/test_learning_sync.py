@@ -216,6 +216,117 @@ class LearningSyncTest(unittest.TestCase):
                 self.sync.backup({"schema": 1, "created": 0, "tables": tables})
         self.assertFalse(self.sync.root.exists())
 
+    def test_backup_allows_study_intents(self):
+        backup_data = {
+            "schema": 1,
+            "created": 1729836000000,
+            "tables": {
+                "study_intents": [
+                    {"id": 1, "intent_key": "desktop:101", "english": "deploy", "source": "desktop", "status": "pending"}
+                ]
+            }
+        }
+        res = self.sync.backup(backup_data)
+        self.assertTrue(res["ok"])
+        saved = json.loads((self.sync.root / "phone-learning-latest.json").read_text(encoding="utf-8"))
+        self.assertIn("study_intents", saved["tables"])
+
+    def test_intents_queue_lifecycle_and_idempotent_ack(self):
+        # 初始为空
+        res = self.sync.intents()
+        self.assertEqual(res["total"], 0)
+        self.assertEqual(res["intents"], [])
+
+        # 添加两个意图
+        r1 = self.sync.add_intent("deploy", "部署", "spelling", intent_id="intent_1")
+        r2 = self.sync.add_intent("candidate", "候选词", "meaning", intent_id="intent_2")
+        self.assertTrue(r1["ok"])
+        self.assertTrue(r2["ok"])
+
+        # 查询应返回 2 条
+        res = self.sync.intents()
+        self.assertEqual(res["total"], 2)
+        ids = [it["id"] for it in res["intents"]]
+        self.assertEqual(ids, ["intent_1", "intent_2"])
+
+        # 重复添加应幂等返回 existing
+        r_dup = self.sync.add_intent("deploy", intent_id="intent_1")
+        self.assertEqual(r_dup["status"], "existing")
+
+        # 确认一条
+        ack_res = self.sync.ack_intents(["intent_1"])
+        self.assertEqual(ack_res["acked_count"], 1)
+
+        # 剩余一条
+        res2 = self.sync.intents()
+        self.assertEqual(res2["total"], 1)
+        self.assertEqual(res2["intents"][0]["id"], "intent_2")
+
+        # 重复确认应幂等不报错且移出数量为 0
+        ack_res2 = self.sync.ack_intents(["intent_1"])
+        self.assertEqual(ack_res2["acked_count"], 0)
+
+    def test_intents_expired_filtered_out(self):
+        now = int(datetime.datetime.now().timestamp() * 1000)
+        # 添加一个已过期意图
+        self.sync.add_intent("expired_word", intent_id="exp_1", created_at=now - 40 * 86400 * 1000, expires_at=now - 1000)
+        # 添加一个有效意图
+        self.sync.add_intent("valid_word", intent_id="val_1", created_at=now, expires_at=now + 86400 * 1000)
+
+        res = self.sync.intents(now_millis=now)
+        self.assertEqual(res["total"], 1)
+        self.assertEqual(res["intents"][0]["id"], "val_1")
+
+    def test_app_aggregation_30_day_window_and_top3_plus_other(self):
+        today = datetime.date.today()
+        recent = (today - datetime.timedelta(days=2)).isoformat()
+        too_old = (today - datetime.timedelta(days=35)).isoformat()
+
+        self._write_vocabulary(
+            f"en\tdeploy\t42\t11\t3\t{recent}\t{recent}\t0\t部署\t例句\n"
+        )
+
+        app_events_data = {
+            "schema": 1,
+            "enabled": True,
+            "records": {
+                recent: {
+                    "en:deploy": {
+                        "C:\\Program Files\\VSCode\\Code.exe": [10, 2],
+                        "C:\\Windows\\chrome.exe": [8, 1],
+                        "terminal.exe": [5, 0],
+                        "slack.exe": [3, 0],
+                        "notepad.exe": [1, 0]
+                    }
+                },
+                too_old: {
+                    "en:deploy": {
+                        "ancient.exe": [100, 50]  # 35 天前，必须被窗口过滤排除
+                    }
+                }
+            }
+        }
+        self.sync.root.mkdir(parents=True, exist_ok=True)
+        self.sync.app_events.write_text(json.dumps(app_events_data), encoding="utf-8")
+
+        ctx = self.sync.context()
+        self.assertEqual(ctx["apps_status"], "collected")
+        word = ctx["words"][0]
+        self.assertIsNotNone(word["apps"])
+        apps = word["apps"]
+        # 必须是前 3 个应用 + 1 个 other
+        self.assertEqual(len(apps), 4)
+        self.assertEqual(apps[0]["app"], "Code.exe")
+        self.assertEqual(apps[0]["commit_with_gloss"], 10)
+        self.assertEqual(apps[0]["gloss_typed"], 2)
+        self.assertEqual(apps[1]["app"], "chrome.exe")
+        self.assertEqual(apps[2]["app"], "terminal.exe")
+        self.assertEqual(apps[3]["app"], "other")
+        # other 累计 slack(3) + notepad(1) = 4
+        self.assertEqual(apps[3]["commit_with_gloss"], 4)
+        # ancient.exe 不得被计入
+        self.assertFalse(any(a["app"] == "ancient.exe" for a in apps))
+
     def test_pair_authentication_and_body_limits(self):
         state = SpeechState("receive-token", [])
         state.learning = self.sync
