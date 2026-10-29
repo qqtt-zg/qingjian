@@ -1,7 +1,8 @@
 //! 标点 / 数字按当前键盘布局解析，测键时不改变 dead key 状态。
 
 use windows::Win32::UI::Input::KeyboardAndMouse::{
-    GetKeyboardLayout, GetKeyboardState, HKL, MAPVK_VK_TO_VSC, MapVirtualKeyExW, ToUnicodeEx,
+    GetKeyState, GetKeyboardLayout, GetKeyboardState, HKL, MAPVK_VK_TO_VSC, MapVirtualKeyExW,
+    ToUnicodeEx, VK_NUMLOCK,
 };
 
 pub(super) fn character(vk: u32) -> Option<char> {
@@ -10,8 +11,23 @@ pub(super) fn character(vk: u32) -> Option<char> {
         return None;
     }
     let mut state = [0; 256];
-    unsafe { GetKeyboardState(&mut state) }.ok()?;
-    resolve(vk, &state, unsafe { GetKeyboardLayout(0) })
+    if unsafe { GetKeyboardState(&mut state) }.is_ok()
+        && let Some(ch) = resolve(vk, &state, unsafe { GetKeyboardLayout(0) })
+    {
+        return Some(ch);
+    }
+    // 特殊窗口或异步状态下 ToUnicodeEx 偶尔取不到字符时的物理键位兜底
+    match vk {
+        0x60..=0x69 if unsafe { GetKeyState(VK_NUMLOCK.0 as i32) } & 1 != 0 => {
+            Some((b'0' + (vk - 0x60) as u8) as char)
+        }
+        0x6A => Some('*'),
+        0x6B => Some('+'),
+        0x6D => Some('-'),
+        0x6E if unsafe { GetKeyState(VK_NUMLOCK.0 as i32) } & 1 != 0 => Some('.'),
+        0x6F => Some('/'),
+        _ => None,
+    }
 }
 
 fn resolve(vk: u32, state: &[u8; 256], layout: HKL) -> Option<char> {

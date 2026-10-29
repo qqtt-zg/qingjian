@@ -40,7 +40,7 @@ pub(crate) fn is_nav(vk: u32) -> bool {
 }
 
 fn is_digit(vk: u32) -> bool {
-    (0x30..=0x39).contains(&vk)
+    (0x30..=0x39).contains(&vk) || (0x60..=0x69).contains(&vk)
 }
 
 /// 主键盘区 1–9（修饰键 + 数字的快捷键按这个认）。

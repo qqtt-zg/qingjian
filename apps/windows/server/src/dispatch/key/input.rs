@@ -52,7 +52,12 @@ impl Router {
         if event.modifiers.has_command_key() {
             return Effect::Passthrough;
         }
-        let Some(c) = event.character.filter(|c| !c.is_control()) else {
+        let c = event.character.filter(|c| !c.is_control()).or_else(|| {
+            (0x60..=0x69)
+                .contains(&event.virtual_key)
+                .then(|| (b'0' + (event.virtual_key - 0x60) as u8) as char)
+        });
+        let Some(c) = c else {
             return self.apply_function_key(event);
         };
         // Caps 亮着无论中英模式都直接出大写英文；英文候选只在持久英文模式、Caps 灭、应用允许时给。
