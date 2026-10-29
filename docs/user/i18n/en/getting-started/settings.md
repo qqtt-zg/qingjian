@@ -24,7 +24,7 @@ Settings that exist only on some platforms are hidden on the others; settings th
 | Page | Contents | Details |
 |---|---|---|
 | 输入 (Input) | Pinyin scheme (full pinyin, double pinyin, Zhuyin), shape-based input (Wubi), picking in steps, key hints, fuzzy pinyin, auxiliary code | [Pinyin schemes and fuzzy pinyin](../input/fuzzy-and-shuangpin.md), [Wubi and mixed input](../input/wubi.md), [Auxiliary code](../input/aux-code.md) |
-| 候选 (Candidates) | Candidates per page, learning language, part of speech, Traditional Chinese, pinyin with tones, emoji and symbols, learning your habits, local sentence model, English words | [Glosses beside candidates](../learning/translation.md), [Traditional Chinese output](../input/traditional.md), [Sentences, abbreviations and correction](../input/sentence.md) |
+| 候选 (Candidates) | Candidates per page, numpad digits (Windows), learning language, part of speech, Traditional Chinese, pinyin with tones, emoji and symbols, learning your habits, local sentence model, English words | [Glosses beside candidates](../learning/translation.md), [Traditional Chinese output](../input/traditional.md), [Sentences, abbreviations and correction](../input/sentence.md) |
 | 中英文 (Chinese/English) | English mode, switch key, default mode, remembering per app, English candidates, punctuation, automatic spaces, floating status bar | [Chinese and English](../input/english-mode.md), [Punctuation, symbols and emoji](../input/punctuation.md) |
 | 外观 (Appearance) | Theme, light/dark, horizontal/vertical layout, pinyin position, fonts and sizes, animation | [Appearance and themes](../personalize/appearance.md) |
 | 快捷键 (Shortcuts) | Paging keys, highlight keys, prefix letters, modifiers for glosses, shortcuts for translation and AI suggestions | [Changing keys](../personalize/keys-settings.md) |
@@ -33,7 +33,7 @@ Settings that exist only on some platforms are hidden on the others; settings th
 | 云服务 (Cloud services) | Turning AI services on, the provider, each AI feature | [AI services](../cloud/index.md) |
 | 统计 (Statistics) | Amount typed, speed, vocabulary progress, AI usage | [Statistics](../learning/statistics.md) |
 | 生词本 (Vocabulary book) | Timeline and word list, export, clear | [Vocabulary book](../learning/vocabulary.md) |
-| 实验功能 (Experimental features) | Download and turn on local models still in testing: Zhiyi and Hanzhang Zhiwei (macOS, Windows) | [Sentences, abbreviations and correction](../input/sentence.md#Experimental-features) |
+| 实验功能 (Experimental features) | Download and turn on local sentence models: Zhiyi and Hanzhang Tongbian (macOS, Windows) | [Sentences, abbreviations and correction](../input/sentence.md#Experimental-features) |
 | 高级 (Advanced) | Configuration file, logs, input log | [Privacy](../help/privacy.md), [Editing the configuration file](../advanced/config-file.md) |
 | 关于 (About) | Version, update check, licenses, data sources, privacy notes | [Privacy](../help/privacy.md#Checking-for-updates) |
 

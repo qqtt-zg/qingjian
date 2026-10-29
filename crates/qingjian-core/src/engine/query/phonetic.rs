@@ -1,8 +1,20 @@
 //! 拼音侧的候选生成：切分、拼写纠错、词级查找与排序，再补上整句、英文、快捷与 emoji 候选。
 
 use std::borrow::Cow;
+use std::collections::HashMap;
+use std::time::{Duration, Instant};
 
-use super::*;
+use qingjian_dictionary::Match;
+
+use crate::engine::query::chinese_candidate;
+use crate::engine::{
+    Learner, MAX_CANDIDATES, abbreviated_count, choice_key, pattern_key, segment_longest_prefix,
+};
+use crate::ranking::{FUZZY_PENALTY, Scored};
+use crate::{
+    Candidate, CandidateKind, CandidateList, Engine, ParseError, Query, Segmentation, Timings,
+    correction, parser, ranking,
+};
 
 impl Engine {
     /// 拼音侧（全拼 / 双拼 / 注音）的候选生成：整段作用域是一串读音。
@@ -56,6 +68,7 @@ impl Engine {
                     rest,
                     decoded_keys: self.shuangpin.is_some() || self.zhuyin,
                     shuangpin_raw_preedit: self.shuangpin.is_some() && self.shuangpin_raw_preedit,
+                    shuangpin_raw_window: self.shuangpin.is_some() && self.shuangpin_raw_window,
                     typed_display: decoded.as_ref().map(|d| d.marked()),
                     typed_case: None,
                     pinyin_choices: Vec::new(),
@@ -93,6 +106,10 @@ impl Engine {
         let mut scored = Vec::new();
         // 不同切分共享很多前缀（`zh g d o…` 的各种切法前几段一样），同一次查询里同一个模式只查一遍
         let mut memo: HashMap<String, Vec<Match<'_>>> = HashMap::new();
+        // 有一种切法全是完整音节时，别的切法里拆开的音节（`shan` 拆成 `s h an` / `sha n`）多半不是用户的意思
+        let clean = segmentations
+            .iter()
+            .any(|s| s.syllables.iter().all(|x| x.complete));
         for segmentation in &segmentations {
             let mut patterns = segmentation.patterns();
             let count = patterns.len();
@@ -108,18 +125,39 @@ impl Engine {
             let abbreviated = abbreviated_count(&patterns);
             // 没有替代写法时每条命中都是敲的原音节，`penalty` 直接给 0（单字母简拼能命中几万条）
             let hits = self.lookup_all(&positions);
+            let whole_split = clean && segmentation.syllables.iter().any(|x| !x.complete);
+            // 末音节读成它的模糊音写法（`zi` 开 z-zh 读成 zhi）也算打完的末音节：否则模糊音命中的常用字
+            // 全排在原样读音的几百个生僻字之后，预选还会把它们砍掉（`li` 开 n-l 的 你 进不了前 500）
+            let last_readings = if last.complete {
+                self.fuzzy.readings(&last.text)
+            } else {
+                Vec::new()
+            };
             scored.reserve(hits.len());
             for hit in hits {
-                let full_last = last.complete
-                    && hit.syllables().nth(count - 1) == Some(patterns[count - 1].text);
+                let last_syllable = hit.syllables().nth(count - 1);
+                let typed_last = last.complete && last_syllable == Some(patterns[count - 1].text);
+                let fuzzy_last = last.complete
+                    && !typed_last
+                    && last_syllable
+                        .is_some_and(|syllable| last_readings.iter().any(|r| r == syllable));
+                let mut penalty = expanded.penalty(hit.syllables());
+                // `fan` 是 `fang` 的前缀，按前缀查到的 放 不带模糊音的扣分；当作 an-ang 的读法就该扣
+                if fuzzy_last
+                    && let Some(syllable) = last_syllable
+                    && expanded.cost(count - 1, syllable) == 0.0
+                {
+                    penalty += FUZZY_PENALTY;
+                }
                 scored.push(Scored {
                     hit,
-                    full_last,
+                    full_last: typed_last || fuzzy_last,
                     coverage: segmentation.letters(),
                     abbreviated,
                     weight: self.learner.weight(hit.text),
-                    penalty: expanded.penalty(hit.syllables()),
+                    penalty,
                     tone_cost: crate::zhuyin::tone::cost(hit.text, hit.syllables(), &tones),
+                    split: whole_split,
                 });
             }
             // 输入的前缀也出候选（`kaifazhe` → 开发、开），否则长句没法逐词上屏。
@@ -145,6 +183,8 @@ impl Engine {
                         weight: self.learner.weight(hit.text),
                         penalty: expanded.penalty(hit.syllables()),
                         tone_cost: crate::zhuyin::tone::cost(hit.text, hit.syllables(), &tones),
+                        // 拆开的读法的前缀也算拆开的（`shi sha n` 的 是啥）；同一个词从全是完整音节的切法也命中时那条排在前面
+                        split: whole_split,
                     });
                 }
             }
@@ -157,16 +197,38 @@ impl Engine {
         // `ba` 在「做了」后面出 吧、句首出 把
         let log_total = (self.total_frequency() as f64).max(1.0).ln();
         let letters = choice_key(scope, scope.len());
-        ranking::rank(&mut scored, MAX_CANDIDATES, |item| {
-            let hit = &item.hit;
-            // 纠错生效时覆盖的是纠正后的字母，换算回原串再查「这个输入串下选过什么」
+        // 纠错生效时覆盖的是纠正后的字母，换算回原串再查「这个输入串下选过什么」
+        let choice = |item: &Scored<'_>| {
             let covered = correction
                 .as_ref()
                 .map_or(item.coverage, |c| c.edit.to_original(item.coverage));
-            let choice = letters
+            letters
                 .get(..covered)
-                .map_or(0, |input| self.learner.choice_weight(input, hit.text));
-            (choice, self.word_log_prob(hit, log_total))
+                .map_or(0, |input| self.learner.choice_weight(input, item.hit.text))
+        };
+        ranking::rank(&mut scored, MAX_CANDIDATES, |item| {
+            (choice(item), self.word_log_prob(&item.hit, log_total))
+        });
+        let whole = segmentations
+            .iter()
+            .map(Segmentation::letters)
+            .max()
+            .unwrap_or(0);
+        let first = segmentations
+            .first()
+            .and_then(|s| s.syllables.first())
+            .map_or(0, |s| s.text.len());
+        // 末尾只敲了个没打完的音节（`woganj` 的 j）时，盖住前面完整音节的词（我敢）也算整词；
+        // 有一种全是完整音节的切法时（`mingtia` 读得成 ming ti a）末尾不算没打完
+        let complete = segmentations.first().filter(|_| !clean).map_or(whole, |s| {
+            if s.last_is_partial() {
+                s.letters() - s.syllables.last().map_or(0, |last| last.text.len())
+            } else {
+                s.letters()
+            }
+        });
+        ranking::arrange(&mut scored, whole, complete, first, clean, |item| {
+            choice(item) > 0
         });
         // 辅码态：词库候选按码段**反向**过滤（逐个问「有没有以码段开头的码」），无码词直接隐藏；
         // 命中的按「完全匹配码 > 码长降序 > 原词频序」重排（stable sort 保住 rank 排好的原序）。
@@ -205,6 +267,23 @@ impl Engine {
         }
         // 附加候选（英文尾段与补全、快捷、整句、emoji）都没有码：辅码筛词时一律不出
         if aux_code.is_none() {
+            // 双拼 / 注音末尾落单的一键是「还没敲完」，不是拼错（`veg` → zhe g…）；词级已有整词
+            // 逐音节对上全部输入（`veg` → 这个）时按中文读法：英文候选不排第一、也不给补全，
+            // 空格不会把整串当英文上屏。全拼的落单字母另有「可能敲反了」的意思，照旧（见 correction）
+            let covered_by_word = decoded.is_some()
+                && correction::trailing_single_letter(segmentations.first())
+                && segmentations.first().is_some_and(|best| {
+                    let patterns = best.patterns();
+                    items.iter().any(|c| {
+                        c.kind == CandidateKind::Chinese
+                            && c.syllables.len() == patterns.len()
+                            && c.syllables
+                                .iter()
+                                .zip(&patterns)
+                                .all(|(syllable, pattern)| pattern.accepts(syllable))
+                    })
+                });
+            let english_unlikely = unlikely && !covered_by_word;
             // 中文优先：整句先进去占第一，英文词紧跟其后（第二）；关掉时英文词先进、整句排在开头的英文后面
             if self.chinese_first {
                 self.insert_sentence(
@@ -214,9 +293,9 @@ impl Engine {
                     english_tail.as_ref().filter(|_| correction.is_none()),
                     head_wins,
                 );
-                self.insert_english(&mut items, unlikely);
+                self.insert_english(&mut items, english_unlikely);
             } else {
-                self.insert_english(&mut items, unlikely);
+                self.insert_english(&mut items, english_unlikely);
                 self.insert_sentence(
                     &mut items,
                     &segmentations,
@@ -253,6 +332,7 @@ impl Engine {
             rest,
             decoded_keys: self.shuangpin.is_some() || self.zhuyin,
             shuangpin_raw_preedit: self.shuangpin.is_some() && self.shuangpin_raw_preedit,
+            shuangpin_raw_window: self.shuangpin.is_some() && self.shuangpin_raw_window,
             typed_display,
             typed_case,
             pinyin_choices: Vec::new(),

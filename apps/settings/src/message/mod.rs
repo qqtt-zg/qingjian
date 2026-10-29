@@ -71,6 +71,8 @@ pub enum Message {
     RemoveModel(qingjian_platform::LocalModel),
     /// 手机朗读辅助工具的动作；值为选择的音色或模型文件夹。
     Speech(&'static str, Option<String>),
+    /// 实验功能里开一个模型（`None` 是关掉，不用模型）。
+    UseModel(Option<qingjian_platform::LocalModel>),
     /// 展开 / 收起「关于」页的数据来源。
     ToggleSources,
     /// 统计页切到「云服务」层（`false` 回「输入」层）。

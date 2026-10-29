@@ -184,7 +184,8 @@ impl Menu {
                 HitTarget::MenuItem(item) => Some(item),
                 HitTarget::Candidate(_)
                 | HitTarget::Translation { .. }
-                | HitTarget::Speak(_) => None,
+                | HitTarget::Speak(_)
+                | HitTarget::Page(_) => None,
             })
     }
 }

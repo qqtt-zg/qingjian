@@ -242,6 +242,8 @@ impl Router {
         self.engine.set_show_tones(config.general.show_tones);
         self.engine.set_chinese_first(config.general.chinese_first);
         self.engine
+            .set_spelling_correction(config.general.spelling_correction);
+        self.engine
             .set_emoji_limit(usize::from(config.general.emoji.get()));
         self.engine
             .set_kaomoji_limit(usize::from(config.general.kaomoji.get()));
@@ -258,6 +260,8 @@ impl Router {
         self.engine.set_auto_space(config.general.auto_space);
         self.engine
             .set_shuangpin_raw_preedit(config.general.shuangpin_raw_preedit);
+        self.engine
+            .set_shuangpin_raw_window(config.general.shuangpin_raw_window);
         self.engine
             .set_hold_selections(config.general.hold_selections);
         self.engine
@@ -328,3 +332,6 @@ impl Router {
         self.engine.set_aux_codes(tables);
     }
 }
+
+#[cfg(test)]
+mod traditional_tests;

@@ -14,7 +14,7 @@ use crate::engine::decoded::EngineDecoded;
 use crate::fuzzy::FuzzyRules;
 use crate::history::InputHistory;
 use crate::panel::PanelHistory;
-use crate::sentence::{Interpolation, LanguageModel, Personal, SentenceScorer};
+use crate::sentence::{Interpolation, LanguageModel, Personal, SearchLimits, SentenceScorer};
 use crate::shuangpin::{Layout, Scheme};
 use crate::traditional::{Traditional, TraditionalVariant};
 use qingjian_dictionary::{AuxCodeLookup, CodeTable, Dictionary, WordList};
@@ -56,6 +56,15 @@ impl Engine {
 
     pub fn shuangpin_raw_preedit(&self) -> bool {
         self.shuangpin_raw_preedit
+    }
+
+    /// 换双拼候选窗口拼音行的显示形式：开着时显示原始按键，关着（缺省）展开成全拼。
+    pub fn set_shuangpin_raw_window(&mut self, enabled: bool) {
+        self.shuangpin_raw_window = enabled;
+    }
+
+    pub fn shuangpin_raw_window(&self) -> bool {
+        self.shuangpin_raw_window
     }
 
     /// 挂上辅码码表（用户导入的与随包的笔画表）。照 [`Self::set_extra_dictionaries`] 的模式：壳按目录与配置装配。
@@ -326,6 +335,12 @@ impl Engine {
         self.fuzzy
     }
 
+    /// 设置显式选区翻译的提供方，独立于自动联想；取消后旧结果不会上屏。
+    pub fn set_translation_predictor(&mut self, predictor: Option<Box<dyn Predictor>>) {
+        self.cancel_prediction();
+        self.translation_predictor = predictor;
+    }
+
     pub fn with_predictor(mut self, predictor: Box<dyn Predictor>) -> Self {
         self.predictor = predictor;
         self
@@ -347,6 +362,7 @@ impl Engine {
         margin: Option<f64>,
         context: Option<usize>,
     ) -> Self {
+        self.generative = scorer.generates();
         self.sentence_scorer = Some(scorer);
         self.rescorer = None;
         self.set_neural_parameters(weight, margin, context);
@@ -367,10 +383,18 @@ impl Engine {
         self
     }
 
+    /// 后台模型（异步重打分、选词模型）每交一次结果就调一下 `wake`：壳拿它叫醒自己的消息循环，不用等下一次轮询。
+    /// 模型先接上、后给回调也行。
+    pub fn set_rescoring_wake(&self, wake: Option<super::Wake>) {
+        self.wake.set(wake);
+    }
+
     /// 运行时换 / 卸异步重打分器（壳里模型在后台加载完才接上，配置关掉就卸）。
     pub fn set_async_sentence_scorer(&mut self, scorer: Option<Box<dyn SentenceScorer>>) {
         self.sentence_scorer = None;
-        self.rescorer = scorer.map(super::rescoring::RescoreWorker::spawn);
+        self.generative = scorer.as_ref().is_some_and(|s| s.generates());
+        let wake = self.wake.clone();
+        self.rescorer = scorer.map(|scorer| super::rescoring::RescoreWorker::spawn(scorer, wake));
         *self.neural_cache.borrow_mut() = super::rescoring::NeuralCache::default();
         self.forget_span_cache();
     }
@@ -383,6 +407,16 @@ impl Engine {
 
     pub fn interpolation(&self) -> Interpolation {
         self.interpolation
+    }
+
+    /// 换一组整句搜索规模（回放调参用）；格子候选留几条由它决定，缓存作废。
+    pub fn set_search_limits(&mut self, limits: SearchLimits) {
+        self.search_limits = limits;
+        self.forget_span_cache();
+    }
+
+    pub fn search_limits(&self) -> SearchLimits {
+        self.search_limits
     }
 
     /// 换一组敲错纠正代价（回放调参用）；整句格子缓存与纠错缓存作废。
@@ -521,6 +555,20 @@ impl Engine {
         self.chinese_first
     }
 
+    /// 拼写纠错开关（配置 `[general] spelling_correction`，缺省开）。关掉后拼音只按敲的原样（与模糊音）读：
+    /// 不做整段纠正，整句词图也不加敲错边，学来的敲错表不再起作用（表本身留着）。
+    pub fn set_spelling_correction(&mut self, on: bool) {
+        if self.spelling_correction != on {
+            self.spelling_correction = on;
+            *self.correction_cache.borrow_mut() = None;
+            self.forget_span_cache();
+        }
+    }
+
+    pub fn spelling_correction(&self) -> bool {
+        self.spelling_correction
+    }
+
     /// 中西文之间是否自动补空格（配置 `[general] auto_space`，缺省关）。
     pub fn set_auto_space(&mut self, on: bool) {
         self.auto_space = on;
@@ -613,11 +661,22 @@ impl Engine {
         &self.extra_dictionaries
     }
 
+    /// 挂上从三元模型词表补出的词（`qingjian_dictionary::supplement`），`None` 摘掉。格子缓存随之作废。
+    pub fn set_model_words(&mut self, words: Option<Dictionary>) {
+        self.model_words = words;
+        self.forget_span_cache();
+    }
+
+    pub fn model_words(&self) -> Option<&Dictionary> {
+        self.model_words.as_ref()
+    }
+
     /// 查词用的全部词库：主词库、附加词库、内置的符号与 emoji 名字、用户词。
     pub(super) fn all_dictionaries(&self) -> Vec<&Dictionary> {
         let mut all = Vec::with_capacity(self.extra_dictionaries.len() + 2);
         all.push(&self.dictionary);
         all.extend(self.extra_dictionaries.iter());
+        all.extend(self.model_words.as_ref());
         all.extend(self.companion_words);
         if let Some(user) = self.learner.user_words() {
             all.push(user);

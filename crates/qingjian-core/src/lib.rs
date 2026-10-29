@@ -6,6 +6,7 @@
 
 pub mod calculation;
 pub mod candidate;
+pub mod chaizi;
 pub mod code;
 pub mod code_scheme;
 pub mod composition;
@@ -48,15 +49,15 @@ pub use correction::Correction;
 pub use email::{EmailCompletion, email_completions};
 pub use emoji::{EmojiTable, skin_tone_variants};
 pub use engine::{
-    AnnotationReport, AuxSegment, BOOKS, Book, ChoiceModel, ChoiceNote, ChoiceTier, CloudWord,
-    CommitEntry, DEFAULT_AUX_CODE_KEY, ENGLISH_CANDIDATES_MAX, Encounter, Engine, EngineSession,
-    FRESH_UNTIL, FilledGloss, Forgotten, GlossFiller, INPUT_LOG_VERSION, InputLogEntry,
-    InputLogger, InputSource, Learner, LevelCount, MarkedKind, MarkedSegment, ModeKeys,
-    NEURAL_MARGIN, NEURAL_WEIGHT, NoGlossFiller, NoInputLogger, NoLearner, NoPredictor,
+    AnnotationReport, AuxSegment, BOOKS, Book, CharTable, ChoiceModel, ChoiceNote, ChoiceScore,
+    ChoiceTier, CloudWord, CommitEntry, DEFAULT_AUX_CODE_KEY, ENGLISH_CANDIDATES_MAX, Encounter,
+    Engine, EngineSession, FRESH_UNTIL, FilledGloss, Forgotten, GlossFiller, INPUT_LOG_VERSION,
+    InputLogEntry, InputLogger, InputSource, Learner, LevelCount, MarkedKind, MarkedSegment,
+    ModeKeys, NEURAL_MARGIN, NEURAL_WEIGHT, NoGlossFiller, NoInputLogger, NoLearner, NoPredictor,
     NoTranslator, NoUsageMeter, NoVocabularyTracker, Prediction, PredictionKind, PredictionPolicy,
     PredictionRequest, Predictor, QUESTION_PREFIX, Query, RESCORE_CONTEXT_CHARS, RawPreedit,
     SurroundingText, Timings, Translator, Usage, UsageMeter, UsageSummary, VocabularySummary,
-    VocabularyTracker, book_scale, is_valid_aux_code_key,
+    VocabularyTracker, Wake, book_scale, is_valid_aux_code_key,
 };
 pub use fuzzy::FuzzyRules;
 pub use history::{DEFAULT_FRESH_SECONDS, InputHistory};

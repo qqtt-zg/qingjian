@@ -230,6 +230,18 @@ pub(crate) fn view(settings: &Settings, context: &mut ViewContext<Settings>) -> 
             switch_key_boxes(settings, context),
         ),
         field(
+            "中文组句中的小键盘数字",
+            "选择候选（默认），或直接输入数字并与已敲内容一起上屏。主键盘数字仍选候选；英文、注音、表达式和问字模式不受影响。",
+            ComboBox::new()
+                .items_source(NumpadDigit::ALL.iter().map(|mode| mode.label()))
+                .selected_index(
+                    NumpadDigit::ALL
+                        .iter()
+                        .position(|mode| *mode == g.numpad_digit),
+                )
+                .on_selection_changed(context.callback(Message::NumpadDigit)),
+        ),
+        field(
             "启用内置英文模式",
             "关掉后青简固定中文模式：切换键与任务栏、悬浮状态条上的「中」「英」按钮都不再切到英文，需要英文时用系统快捷键（Win + Space）切到别的输入法。",
             ToggleSwitch::new()

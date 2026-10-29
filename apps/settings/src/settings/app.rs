@@ -7,7 +7,6 @@ use bamboo_slip::taffy::NodeId;
 use bamboo_slip::{App, FamilyList, FamilyTable, Key, RenderError, TextPainter, Ui, Waker};
 
 use super::{SIZES, Settings};
-use qingjian_platform::LocalModel;
 
 use crate::jobs::model_download::Pack;
 use crate::library::{self, Library};
@@ -171,13 +170,14 @@ impl App for Settings {
                 }
             }
             Message::CancelDownload => self.download.cancel(),
+            Message::UseModel(model) => self.use_model(model),
             Message::RemoveModel(model) => {
                 if remove_armed != Some(model) {
                     self.remove_armed = Some(model);
                 } else if let Some(pack) = Pack::of(model) {
-                    // 先换回通变再删，输入法不会去读删了一半的目录
+                    // 先关掉再删，输入法不会去读删了一半的目录
                     if self.config.model.name == model {
-                        self.write("model", "name", LocalModel::Tongbian.key());
+                        self.use_model(None);
                     }
                     if let Err(error) = pack.remove() {
                         self.notice = Some(("download", error));
@@ -305,7 +305,7 @@ impl App for Settings {
         changed |= self.download.stage().is_some();
         if let Some(model) = self.download.finished() {
             // 下好了直接用上它：用户点下载就是想用
-            self.write("model", "name", model.key());
+            self.use_model(Some(model));
         }
         if let Some(text) = self.update.finish(&self.config.update) {
             self.notice = Some(("update", text));

@@ -49,12 +49,12 @@ impl Pack {
     pub const ALL: [Self; 2] = [
         Self::ZHIYI,
         Self {
-            model: LocalModel::Zhiwei,
-            tag: "hanzhang-zhiwei-v1.0.0",
-            archive_dir: "hanzhang/zhiwei",
-            install_dir: "models/hanzhang-zhiwei",
-            marker: "hanzhang-zhiwei-small.qjm",
-            size: "52 MB",
+            model: LocalModel::Tongbian,
+            tag: "hanzhang-tongbian-v1.0.0",
+            archive_dir: "hanzhang/tongbian",
+            install_dir: "models/hanzhang-tongbian",
+            marker: "hanzhang-tongbian-small.qjm",
+            size: "43 MB",
         },
     ];
 

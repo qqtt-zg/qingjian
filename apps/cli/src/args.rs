@@ -1,6 +1,7 @@
 use std::path::PathBuf;
 
 use clap::Parser;
+use qingjian_platform::ZhiyiTier;
 
 /// 按优先级挑一个存在的数据文件：`data/generated/` 里打包好的 `.qj`、那里的 TSV、仓库自带的产品数据
 /// （`assets/lexicon/dict.tsv`、`assets/glossary/glossary-*.tsv`、`assets/lexicon/english.tsv`），最后是 `assets/sample/` 的样例。
@@ -18,6 +19,13 @@ pub fn default_data_file(name: &str) -> PathBuf {
         }
     }
     PathBuf::from("assets/sample").join(name)
+}
+
+fn parse_zhiyi_tier(value: &str) -> Result<ZhiyiTier, String> {
+    ZhiyiTier::ALL
+        .into_iter()
+        .find(|tier| tier.key() == value)
+        .ok_or_else(|| format!("unknown tier {value:?}, expected saver / balanced / accurate"))
 }
 
 /// 缺省配置文件位置：与输入法共用同一份。
@@ -99,6 +107,10 @@ pub struct Args {
     #[arg(long)]
     pub chinese_first: bool,
 
+    /// 关掉拼写纠错（配置 `[general] spelling_correction = false`）：只按敲的原样（与模糊音）读，比开关两种排法用
+    #[arg(long)]
+    pub no_spelling_correction: bool,
+
     /// 中文模式下英文候选（精确词 + 补全）最多几个（配置 `[general] english_max_in_chinese`，缺省 4）
     #[arg(long, default_value_t = qingjian_core::ENGLISH_CANDIDATES_MAX)]
     pub english_max_in_chinese: usize,
@@ -155,6 +167,28 @@ pub struct Args {
     /// 知意重排里中文位置先验的权重（我们原来的顺序带着个人学习；知意是 0）
     #[arg(long, default_value_t = 0.0)]
     pub zhiyi_rank_weight: f64,
+
+    /// 知意的 ONNX 版（与 Windows Server 同一条路）：模型目录（含 `laya.int8g.onnx`），接到引擎的选词重排上，
+    /// 查询后等分数回来再取结果；要配 `--onnx-runtime`
+    #[arg(long, requires = "onnx_runtime", conflicts_with = "zhiyi")]
+    pub zhiyi_onnx: Option<PathBuf>,
+
+    /// ONNX Runtime 动态库（Windows 是安装目录里的 `onnxruntime.dll`），配 `--zhiyi-onnx`
+    #[arg(long, requires = "zhiyi_onnx")]
+    pub onnx_runtime: Option<PathBuf>,
+
+    /// 词级三元模型（知意输入法的 `zh.ngram`）：选词重排里整段候选的语言模型分改由它给，整句词图里与二元模型插值
+    #[arg(long)]
+    pub ngram: Option<PathBuf>,
+
+    /// 不从 `--ngram` 的词表补词（缺省补：词库没有的词按 `qingjian_dictionary::supplement` 在内存里生成，与 Windows Server 一样），
+    /// 前后对比用
+    #[arg(long, requires = "ngram")]
+    pub no_ngram_words: bool,
+
+    /// 知意的档位：saver / balanced / accurate，与配置 `[model] zhiyi_tier` 同义
+    #[arg(long, default_value = "balanced", value_parser = parse_zhiyi_tier)]
+    pub zhiyi_tier: ZhiyiTier,
 
     /// 神经重打分走后台线程（输入法壳里的接法）：查询先按词级模型出候选，再请求 / 等待重打分后重查一次；结果应与同步一致
     #[arg(long)]
@@ -213,7 +247,8 @@ pub struct Args {
     pub misses: usize,
 
     /// 覆盖引擎里的调参常数，`名=值`，逗号分隔或多次给。名字：lambda / k / cap / discount（个人 n-gram 插值 λ / K / 封顶 / 三元折扣），
-    /// transpose / substitute / extra / missing / typo-cap / correction（敲错四类代价 / 个人折扣上限 / 整段纠错代价）
+    /// transpose / substitute / extra / missing / typo-cap / correction / correction-transpose（敲错四类代价 / 个人折扣上限 / 整段纠错代价 / 转置单独一份），
+    /// span / abbreviated-span / beam（整句搜索规模：每格候选数 / 简拼格候选数 / 束宽。规模参数不接受 0 与小数，浮点参数不接受 NaN 与 inf）
     #[arg(long, value_delimiter = ',')]
     pub tune: Vec<String>,
 

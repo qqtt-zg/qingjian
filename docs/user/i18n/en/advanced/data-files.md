@@ -53,16 +53,16 @@ To start your typing habits over, delete the tables whose names start with `user
 - **Linux**: `~/.local/state/qingjian/logs` (under `XDG_STATE_HOME` if that's set).
 
 打开日志目录 (Open log folder) under 设置 → 高级 → 日志文件 (Settings → Advanced → Log files) opens it directly; 打包到桌面 (Bundle to desktop) packs the logs together with your settings (keys scrubbed) into a zip to attach to a report; see [Reporting problems](../help/feedback.md).
-One file per day, kept for 7 days. What you type isn't recorded by default; only with 详细日志 (Verbose logging) on is each keystroke recorded.
+One file per day, kept for 7 days. What you type isn't recorded by default, only counts such as which app you're typing in, how many keys each composition took and how many characters were committed; only with 详细日志 (Verbose logging) on is each keystroke recorded.
 
 ## Using your own local sentence model
 
-The local sentence model (Hanzhang Tongbian) is bundled. To use a model you've trained yourself, put `hanzhang-tongbian-small.qjm` into `models/hanzhang-tongbian/` in the data folder; after the input method restarts, it's used first:
+On macOS and Windows, the local sentence model Hanzhang Tongbian is downloaded under 设置 → 实验功能 (Settings → Experimental features) into the folders below; the Linux version bundles it. To use a model you've trained yourself, put `hanzhang-tongbian-small.qjm` into `models/hanzhang-tongbian/` in the data folder; after the input method restarts, it's used first:
 
 - **macOS**: `~/Library/Application Support/Qingjian/models/hanzhang-tongbian/`
 - **Windows**: `%APPDATA%\Qingjian\models\hanzhang-tongbian\`
 - **Linux**: `~/.local/share/qingjian/models/hanzhang-tongbian/`
 
-- Hanzhang Zhiwei (`hanzhang-zhiwei-small.qjm`, in `models/hanzhang-zhiwei/`) is no longer bundled. Download it under 设置 → 实验功能 (Settings → Experimental features), or put it in that folder yourself and turn it on there (`[model] name = "zhiwei"`); it uses the few dozen characters before the cursor to reorder candidates. Zhiyi is downloaded to `models/zhiyi/` (`models/zhiyi-onnx/` on Windows).
+- Zhiyi is downloaded to `models/zhiyi/` (`models/zhiyi-onnx/` on Windows). Hanzhang Zhiwei has been retired: `models/hanzhang-zhiwei/` is no longer read and can be deleted.
 - The `model-p2c/` and `model/` folders used by older versions can still be read; for the same model, the new folder takes priority.
 - The three files exported directly, `model.safetensors`, `config.json` and `vocab.json`, are recognized too; if a folder has both kinds, `.qjm` is used first.

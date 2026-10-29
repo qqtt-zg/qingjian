@@ -13,6 +13,7 @@ use std::time::{Duration, Instant, SystemTime};
 
 use qingjian_core::{Language, NoTranslator};
 use qingjian_platform::Config;
+use qingjian_predict::API_USAGE_FILE;
 
 pub(crate) use self::state::ConfigReload;
 use super::{Router, RouterConfig};
@@ -97,6 +98,8 @@ impl Router {
         self.engine.set_learning(config.general.learning);
         self.engine.set_chinese_first(config.general.chinese_first);
         self.engine
+            .set_spelling_correction(config.general.spelling_correction);
+        self.engine
             .set_english_in_chinese(config.general.english_in_chinese);
         self.engine
             .set_english_max_in_chinese(config.general.english_max_in_chinese());
@@ -128,7 +131,8 @@ impl Router {
             return;
         };
         if config.predict != reload.applied_predict {
-            self.reload_cloud(&config.predict);
+            let usage_path = Some(reload.user_dir.join(API_USAGE_FILE));
+            self.reload_cloud(&config.predict, usage_path);
             reload.applied_predict = config.predict.clone();
         }
         if !self.engine.prediction_enabled() {

@@ -1,5 +1,5 @@
 //! 「实验功能」页：可以下载的本地模型，一个一张卡片。没下载给「下载」，下着给进度条与「取消」，下好了才有开关与「删除」；
-//! 通变（随包）、知微、知意三个只开一个，开了这个就关掉另一个，都关着就是通变。知意开着时下面出三档。
+//! 知意、通变两个只开一个，开了这个就关掉另一个，都关着就是不用模型（只按词库）。知意开着时下面出三档。
 
 use bamboo_slip::taffy::{AlignItems, FlexDirection, NodeId, Style};
 use bamboo_slip::{
@@ -16,14 +16,6 @@ use crate::view::parts::controls::choice;
 pub fn experimental(ui: &mut Ui<Message>, page: &Page) -> Result<Vec<NodeId>, RenderError> {
     let theme = &page.theme;
     let mut out = Vec::new();
-    if !page.settings.config.model.enabled {
-        out.push(paragraph(
-            ui,
-            theme,
-            "先到「候选」页打开「本地整句模型」",
-            None,
-        )?);
-    }
     if let Some(("download", error)) = &page.settings.notice {
         out.push(paragraph(ui, theme, error, None)?);
     }
@@ -45,8 +37,7 @@ fn title(model: LocalModel) -> &'static str {
 fn description(model: LocalModel) -> &'static str {
     match model {
         LocalModel::Zhiyi => "按前文挑首选",
-        LocalModel::Zhiwei => "按前文排整句",
-        LocalModel::Tongbian => "随安装包",
+        LocalModel::Tongbian => "按拼音造句",
     }
 }
 
@@ -84,13 +75,12 @@ fn card(ui: &mut Ui<Message>, page: &Page, pack: Pack) -> Result<Vec<NodeId>, Re
             rows.push(row.control(waiting).build(ui, theme)?);
         }
         _ if pack.installed() => {
-            let on = model.name == pack.model;
-            let next = if on { LocalModel::Tongbian } else { pack.model };
+            let on = model.enabled && model.name == pack.model;
             let switch = Switch::new(on).build(
                 ui,
                 theme,
                 ("use", pack.tag),
-                Message::set("model", "name", next.key()),
+                Message::UseModel((!on).then_some(pack.model)),
             )?;
             let armed = settings.remove_armed == Some(pack.model);
             let mut remove = Button::new(if armed {
@@ -110,7 +100,7 @@ fn card(ui: &mut Ui<Message>, page: &Page, pack: Pack) -> Result<Vec<NodeId>, Re
             let controls = ui.scene().node(
                 Style {
                     flex_direction: FlexDirection::Row,
-                    align_items: Some(AlignItems::CENTER),
+                    align_items: AlignItems::CENTER,
                     gap: page.gap(12.0),
                     ..Style::default()
                 },

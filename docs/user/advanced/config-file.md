@@ -38,8 +38,8 @@ description: 青简的全部设置保存在一个文本配置文件里：位置�
 | `[general] english_in_chinese` | 候选 → 打拼音时也给英文词 | `true` / `false` |
 | `[general] english_max_in_chinese` | 候选 → 英文候选最多几个 | `1`–`4`，缺省 `4` |
 | `[general] english_min_position` | 候选 → 英文词最高排到第几位 | `1`–`9`，缺省 `1`（不限） |
-| `[model] enabled` | 候选 → 本地整句模型 | `true` / `false` |
-| `[model] name`、`zhiyi_tier` | 实验功能 → 用哪个模型、知意的档位 | `name`：`tongbian`（缺省）、`zhiwei`、`zhiyi`，选了没下载的按 `tongbian`；`zhiyi_tier`：`saver`、`balanced`（缺省）、`accurate` |
+| `[model] enabled` | 候选 → 本地整句模型 | `true` / `false`（缺省） |
+| `[model] name`、`zhiyi_tier` | 实验功能 → 用哪个模型、知意的档位 | `name`：`tongbian`（缺省）、`zhiyi`，选了没下载的不用模型（旧的 `zhiwei` 按 `tongbian` 读）；`zhiyi_tier`：`saver`、`balanced`（缺省）、`accurate` |
 | `[model] context_memory_seconds` | 只在配置文件里 | 应用不给光标前文时，刚打的字算作前文的时长，缺省 60，0 为一直算 |
 | `[general] english_mode` | 中英文 → 英文模式 | `false` 为固定中文 |
 | `[shortcut] switch_mode` | 中英文 → 切换键 | 列表，如 `["shift", "control"]` |
@@ -51,6 +51,7 @@ description: 青简的全部设置保存在一个文本配置文件里：位置�
 | `[shortcut] extra_page_keys` | 快捷键 → 额外翻页键 | 列表，如 `["[]", ",.", "-="]`，缺省为空 |
 | `[shortcut] highlight_keys` | 快捷键 → 高亮移动键 | 上下或左右 |
 | `[shortcut] toggle_punctuation` | 快捷键 → Ctrl + . 切换全半角标点 | 空串为关闭，`"ctrl+."` 为 Ctrl + 句号；也可写成修饰键加字母、数字或句号，如 `"ctrl+shift+."` |
+| `[shortcut] toggle_traditional` | 快捷键 → Ctrl + Shift + F 切换简繁输出 | 空串为关闭（缺省），`"ctrl+shift+f"` 为 Ctrl + Shift + F；也可写成修饰键加字母或数字。只有 Windows 用 |
 | `[shortcut] translate_selection` | 快捷键 → 翻译选中文字 | 如 `"alt+shift+t"` |
 | `[shortcut] predict` | 快捷键 → 按需 AI 联想 | 完整的组合键，设置界面只改修饰键 |
 | `[predict]` 一节 | 云服务 | 见下文 |

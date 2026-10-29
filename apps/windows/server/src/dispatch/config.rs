@@ -26,7 +26,7 @@ pub struct RouterConfig {
     /// 关着（缺省）时壳把大写字母交给应用，与以前一致。
     pub shift_letter_compose: bool,
 
-    /// 中文组句中小键盘数字选候选还是直接输入。
+    /// 中文组句中小键盘数字的用途（`[general] numpad_digit`）。
     pub numpad_digit: NumpadDigit,
 
     /// 候选排布（`[general] layout`）。
@@ -115,6 +115,9 @@ pub struct RouterConfig {
     /// 组句中按需调用 AI 的快捷键（`[shortcut] predict`）。
     pub predict: KeyCombo,
 
+    /// 简繁切换快捷键；与选区翻译相同时不登记，保留翻译行为。
+    pub toggle_traditional: Option<KeyCombo>,
+
     /// 悬浮状态条开关（`[status_bar] enabled`）。
     pub status_enabled: bool,
 
@@ -129,6 +132,9 @@ pub struct RouterConfig {
 
     /// 繁体输出（`[general] traditional_variant`），给候选窗口主题显示简 / 繁。
     pub traditional: bool,
+
+    /// 简繁快捷键从简体切回去的那一档（`[general] last_traditional`）。
+    pub last_traditional: TraditionalVariant,
 
     /// 辅码触发键（`[general] aux_code_key`，缺省 `;`）；非法值退回缺省。
     pub aux_code_key: char,
@@ -218,11 +224,16 @@ impl From<&Config> for RouterConfig {
             speech_keys: config.shortcut.speech_keys().into(),
             translate_selection: config.shortcut.translate_selection,
             predict: config.shortcut.predict,
+            toggle_traditional: config
+                .shortcut
+                .toggle_traditional
+                .filter(|key| *key != config.shortcut.translate_selection),
             status_enabled: config.status_bar.enabled,
             status_pos: config.status_bar.x.zip(config.status_bar.y),
             status_size: config.status_bar.size.clamp(60, 150),
             scheme: config.general.scheme(),
             traditional: config.general.traditional() != TraditionalVariant::Off,
+            last_traditional: config.general.last_traditional(),
             aux_code_key: config.general.aux_code_key(),
             aux_code_show: config.general.aux_code_show,
             translation_pos: config.general.translation_pos,

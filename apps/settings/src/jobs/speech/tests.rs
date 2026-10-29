@@ -33,7 +33,7 @@ fn manual_refresh_completes_and_speech_page_builds_without_live_service() {
 
     let path =
         std::env::temp_dir().join(format!("qingjian-speech-merge-{}.toml", std::process::id()));
-    let mut settings = Settings::load(path).unwrap();
+    let mut settings = Settings::load(path);
     settings.page = PageId::Speech;
     settings.speech.busy = true;
     let state = Snapshot::parse("running = true\nenabled = true\nphone_connected = true\nstatus = \"手机已连接\"\nselected = \"builtin:1\"\n[[choices]]\nkey = \"builtin:1\"\nlabel = \"女声 1 · af_heart\"\n").unwrap();

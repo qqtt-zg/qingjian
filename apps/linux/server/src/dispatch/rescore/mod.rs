@@ -24,15 +24,12 @@ use super::composed::{Composed, marked_parts};
 /// 空闲时主循环多久醒一次：到点落盘学习数据。
 const IDLE_TICK: Duration = Duration::from_secs(1);
 
-/// P2C 优先，同类模型里用户目录优先；没有 P2C 才回退字级模型。
+/// 含章·通变：用户目录（设置里下载的、或自己放的）优先于随包的。含章·知微已下线，它的目录不再找。
 pub fn find_model(user_dir: Option<&Path>, bundled_root: &Path) -> Option<PathBuf> {
     let candidates = [
         user_dir.map(|dir| dir.join("models/hanzhang-tongbian")),
         user_dir.map(|dir| dir.join("model-p2c")),
         Some(bundled_root.join("data/models/hanzhang-tongbian")),
-        user_dir.map(|dir| dir.join("models/hanzhang-zhiwei")),
-        user_dir.map(|dir| dir.join("model")),
-        Some(bundled_root.join("data/models/hanzhang-zhiwei")),
     ];
     candidates
         .into_iter()
@@ -183,6 +180,7 @@ impl Router {
             cursor,
             layout,
             spelling,
+            ..
         }) = self.composed.as_mut()
         else {
             return;
@@ -206,22 +204,18 @@ mod tests {
     use super::find_model;
 
     #[test]
-    fn p2c_precedes_old_model_and_user_precedes_bundled() {
+    fn user_tongbian_precedes_bundled_and_zhiwei_is_ignored() {
         let root =
             std::env::temp_dir().join(format!("qingjian-model-choice-{}", std::process::id()));
         let user = root.join("user");
         let bundled = root.join("bundled");
         let _ = std::fs::remove_dir_all(&root);
 
-        let old = bundled.join("data/models/hanzhang-zhiwei/model.qjm");
-        std::fs::create_dir_all(old.parent().unwrap()).unwrap();
-        std::fs::write(&old, b"").unwrap();
-        assert_eq!(find_model(Some(&user), &bundled), Some(old));
-
-        let user_old = user.join("models/hanzhang-zhiwei/model.qjm");
-        std::fs::create_dir_all(user_old.parent().unwrap()).unwrap();
-        std::fs::write(&user_old, b"").unwrap();
-        assert_eq!(find_model(Some(&user), &bundled), Some(user_old));
+        // 含章·知微已下线：只有它的时候什么都不加载
+        let zhiwei = user.join("models/hanzhang-zhiwei/model.qjm");
+        std::fs::create_dir_all(zhiwei.parent().unwrap()).unwrap();
+        std::fs::write(&zhiwei, b"").unwrap();
+        assert_eq!(find_model(Some(&user), &bundled), None);
 
         let bundled_p2c = bundled.join("data/models/hanzhang-tongbian/model.qjm");
         std::fs::create_dir_all(bundled_p2c.parent().unwrap()).unwrap();

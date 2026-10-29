@@ -110,6 +110,9 @@ pub struct Query {
     /// 双拼模式下是否在 preedit（应用输入框内 marked text）保留原始输入按键。
     pub shuangpin_raw_preedit: bool,
 
+    /// 双拼模式下候选窗口的拼音行是否显示原始输入按键（[`Self::window_segments`]）。
+    pub shuangpin_raw_window: bool,
+
     /// 开启双拼或注音时的显示字串（如 "ㄅㄨˋ"）。如果有此值，preedit 就优先显示它，而不是拼音。
     pub typed_display: Option<String>,
 
@@ -134,6 +137,7 @@ impl Query {
         cursor: usize,
         decoded_keys: bool,
         shuangpin_raw_preedit: bool,
+        shuangpin_raw_window: bool,
         scope: &str,
         rest: String,
     ) -> Self {
@@ -142,6 +146,7 @@ impl Query {
             cursor,
             decoded_keys,
             shuangpin_raw_preedit,
+            shuangpin_raw_window,
             tail: scope.to_owned(),
             rest,
             ..Self::default()
@@ -188,7 +193,11 @@ impl Query {
     /// [`crate::Engine::toned_syllables`]）时，敲的那段换成候选的带调读音，候选没覆盖到的音节照切分接在后面
     /// （`nihao` 高亮 你好 是 `nǐ'hǎo`、高亮 你 是 `nǐ'hao`，简拼 `nh` 高亮 你好 也是 `nǐ'hǎo`）；纠错生效时不换。
     /// 应用输入框里的 marked text 不受影响，仍是 [`Self::marked_text`]。
+    /// 双拼「候选窗显示按键」开着时不换读音，直接是敲的键（`raw_segments`）。
     pub fn window_segments(&self, toned: Option<&[String]>) -> (Vec<MarkedSegment>, usize) {
+        if self.shuangpin_raw_window {
+            return self.raw_segments();
+        }
         let spelled = self.segmentations.get(self.spelled);
         // 读音对不上敲的（模糊音、敲错变体、云端推荐）不换：拼音行仍是用户敲的
         let fits = |toned: &[String]| {
@@ -226,6 +235,32 @@ impl Query {
             .filter(|s| s.kind != MarkedKind::Rest)
             .map(|s| s.text.chars().count())
             .sum();
+        (segments, cursor)
+    }
+
+    /// 敲的键原样分段：前面留着的词、光标前的键、辅码态的触发键与码段，光标后的键单成一段（`Rest`）。
+    fn raw_segments(&self) -> (Vec<MarkedSegment>, usize) {
+        let (before, after) = self.text.split_at(self.cursor.min(self.text.len()));
+        let mut segments = Vec::with_capacity(5);
+        if !self.held.is_empty() {
+            segments.push(MarkedSegment::new(self.held.clone(), MarkedKind::Typed));
+        }
+        if !before.is_empty() {
+            segments.push(MarkedSegment::new(before.to_owned(), MarkedKind::Typed));
+        }
+        if let Some(aux) = &self.aux {
+            segments.push(MarkedSegment::new(
+                aux.trigger.to_string(),
+                MarkedKind::Typed,
+            ));
+            if !aux.code.is_empty() {
+                segments.push(MarkedSegment::new(aux.code.clone(), MarkedKind::AuxCode));
+            }
+        }
+        let cursor = segments.iter().map(|s| s.text.chars().count()).sum();
+        if !after.is_empty() {
+            segments.push(MarkedSegment::new(after.to_owned(), MarkedKind::Rest));
+        }
         (segments, cursor)
     }
 

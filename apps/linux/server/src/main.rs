@@ -52,7 +52,6 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
         language_model: LanguageModelFiles::find(&root.join("data/generated")),
         bundled_dicts_dir: Some(root.join("data/generated/dicts")),
         dictionaries: config.dictionaries.clone(),
-        levels_dir: Some(root.join("assets/levels")),
         user_dir: Some(user_dir.clone()),
         input_log: config.general.input_log,
         log_dir: Some(paths::log_dir()),
@@ -75,6 +74,7 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
     engine.set_shift_letter_compose(config.general.shift_letter.compose());
     engine.set_learning(config.general.learning);
     engine.set_chinese_first(config.general.chinese_first);
+    engine.set_spelling_correction(config.general.spelling_correction);
     engine.set_emoji_limit(usize::from(config.general.emoji.get()));
     engine.set_kaomoji_limit(usize::from(config.general.kaomoji.get()));
     engine.set_symbol_limit(usize::from(config.general.symbols.get()));
@@ -86,7 +86,8 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
     engine
         .set_custom_phrases(config.custom_phrases.clone())
         .map_err(std::io::Error::other)?;
-    assembly::attach_cloud(&mut engine, &config.predict);
+    let usage_path = user_dir.join(qingjian_predict::API_USAGE_FILE);
+    assembly::attach_cloud(&mut engine, &config.predict, Some(usage_path));
     engine.log_session(env!("CARGO_PKG_VERSION"), "linux");
     let mut router = Router::new(engine, RouterConfig::from(&config));
     router.configure_local_model(find_model(Some(&user_dir), &root), &config.model);

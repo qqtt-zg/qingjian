@@ -21,6 +21,7 @@ mod optional_modifiers;
 mod page_keys;
 mod phrases;
 mod preedit_mode;
+mod retired;
 mod scheme;
 mod shift_letter;
 mod shortcut;
@@ -140,7 +141,7 @@ english_candidates_on = [
 macro_rules! template_apps {
     () => {
         r#"[apps]
-# 按应用改行为，条目是 bundle identifier（`*` 结尾按前缀匹配）。开着「详细日志」时切到一个应用会把它的 bundle identifier 记进日志
+# 按应用改行为，条目是 bundle identifier（`*` 结尾按前缀匹配）。切到一个应用时运行日志里会记下它的 bundle identifier
 # 英文模式（Caps Lock）下给候选的应用（白名单）：浏览器、聊天、办公与笔记这类写成段文字的地方。没列的应用里英文字母原样交给应用，
 # 免得挡住终端 / 编辑器自己的补全，或吞掉设计、3D 软件的单键快捷键。写成 ["*"] 就处处都给，再用 english_candidates_off 排除个别应用
 english_candidates_on = [
@@ -176,9 +177,10 @@ english_candidates_on = [
 #[cfg(target_os = "macos")]
 macro_rules! template_shortcut_keys {
     () => {
-        r#"# 中 / 英模式切换键（Windows 用），可多选：shift 单击（缺省）/ control 单击 / ctrl+alt+space 组合键；[] 不用键切换。
-# macOS 的切换键是 Caps Lock（系统级），本项不生效
-switch_mode = ["shift"]
+        r#"# 中 / 英模式切换键，可多选：shift 单击 / control 单击 / ctrl+alt+space 组合键；[] 不用键切换。
+# macOS 只认 shift：写成 ["shift"] 就是单击 Shift 切中英（此时 Caps Lock 只管大小写）；
+# 缺省 [] —— 用 Caps Lock 切换（系统级，不受本项影响）
+switch_mode = []
 # 数字键配这些修饰键上屏候选的译词：translation 第一个译词，translation_second 第二个（候选右侧有两个译词时）
 # 任意修饰键组合（option / shift / control / command 用 + 连），偏好设置里点按钮录制；别用 control+数字（系统切桌面）和 command+数字（应用切标签页）
 translation = "option"
@@ -267,6 +269,8 @@ english_candidates = true
 traditional_variant = "off"
 # 中文模式下整段输入是英文词时（hello / key）是否让中文候选排第一、英文词第二；缺省 false：拼音不像话的输入英文词排第一
 chinese_first = false
+# 拼写纠错：拼音敲错时给纠正后的候选（nihooma → 你好吗）；敲的拼音照原样读得通时纠正只当备选。false 时只按敲的原样读
+spelling_correction = true
 # 中文模式下整段是英文词或英文词的开头时给英文候选与补全（hello、compa → company）；false 时中文模式只出中文，英文模式不受影响
 english_in_chinese = true
 # 中文模式下英文候选（精确词 + 补全）最多几个，1–4；1 时只留最靠前的一条
@@ -315,6 +319,8 @@ aux_code_keep_empty = true
 scheme = ""
 # 双拼方案下 preedit 显示原始按键（如 ljse）还是展开成全拼（lan'se）；缺省 false（展开成全拼）
 shuangpin_raw_preedit = false
+# 双拼方案下候选窗口的拼音行显示原始按键还是全拼，与上一项各管各的；缺省 false（全拼）；macOS、Windows 用
+shuangpin_raw_window = false
 # 一段拼音分几次选完时，先选的词留在输入框里、整段选完才一起上屏，退格先撤回最后一次选择；false 为选了就上屏
 hold_selections = true
 # 形码方案：留空或 off 为关，wubi86 为五笔（86 版），也可以写用户数据目录 schemes/ 下自己放的方案目录名。
@@ -341,6 +347,8 @@ system_text_replacements = true
 [shortcut]
 # Windows：切换当前模式的全 / 半角标点；空串禁用，可设为 "ctrl+." 或其他修饰键加字母、数字、句号
 toggle_punctuation = ""
+# Windows：在简体与上次用的繁体字形之间切换；空串禁用，可设为 "ctrl+shift+f" 或其他修饰键加字母、数字
+toggle_traditional = ""
 # Windows：主翻页键之外同时启用的键对，可多选，如 ["[]", ",.", "-="]
 extra_page_keys = []
 # 前缀模式键，只能是 v / u / i 之一且互不相同（这三个字母不是任何拼音音节的开头）
@@ -388,9 +396,9 @@ enabled = false
 disabled = []
 
 [model]
-# 本地模型：在本机给候选重新排序，全程离线；停顿后几十毫秒生效。关掉只用词库统计
-enabled = true
-# 用哪个：tongbian 含章·通变（随包）/ zhiwei 含章·知微 / zhiyi 知意；后两个先在设置的「实验功能」里下载，没下载就用通变
+# 本地模型：在本机给整句候选重新排序或直接造句，全程离线；停顿后几十毫秒生效。缺省关，只用词库统计
+enabled = false
+# 用哪个：tongbian 含章·通变（按拼音造句）/ zhiyi 知意（按前文挑首选）；先在设置的「实验功能」里下载（Linux 随包带通变），没下载就不用模型
 name = "tongbian"
 # 知意的档位：saver 省电 / balanced 均衡 / accurate 准确（比的候选更多、看的前文更长，也更费电）
 zhiyi_tier = "balanced"

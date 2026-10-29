@@ -81,7 +81,7 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
         return Ok(());
     }
     let config = config.ok_or("找不到配置文件的位置")?;
-    let mut settings = Settings::load(config)?;
+    let mut settings = Settings::load(config);
     if speech && crate::support::Feature::PhoneSpeech.here() {
         settings.page = crate::page_id::PageId::Speech;
     }

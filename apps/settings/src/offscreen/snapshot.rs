@@ -24,7 +24,7 @@ pub fn run(config: Option<&Path>, directory: &Path) -> Result<(), Box<dyn std::e
             let _ = std::fs::remove_file(&copy);
         }
     }
-    let settings = Settings::load(copy)?;
+    let settings = Settings::load(copy);
     let themes: Vec<String> = settings
         .themes
         .themes()

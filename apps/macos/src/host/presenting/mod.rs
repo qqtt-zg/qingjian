@@ -1,10 +1,12 @@
 //! 呈现：候选右键菜单、按应用关英文候选、翻译选区的起止、提示气泡、会话重置与候选窗口绘制。
 
+mod candidate_translation;
 mod key_hint;
 mod notice;
 mod panel;
 mod translation_job;
 
+pub use candidate_translation::CandidateTranslation;
 pub(super) use key_hint::KeyHintState;
 pub(super) use notice::Notice;
 pub use translation_job::TranslationJob;
@@ -55,6 +57,25 @@ impl Host {
             self.apply_config(false);
         }
         Some(outcome.notice)
+    }
+
+    /// 把用户手工输入的译文保存到个人释义表。
+    pub fn set_candidate_translation(&mut self, word: &str, display: &str, text: &str) -> String {
+        if self.engine.set_translation(word, text) {
+            tracing::info!(word, language = %self.engine.learning_language().code(), "候选译文已保存");
+            format!("已更新「{display}」的译文")
+        } else {
+            "译文不能为空，或当前未启用学习语言".to_owned()
+        }
+    }
+
+    pub fn begin_candidate_translation(&mut self, sequence: u64, candidate: Candidate) {
+        self.candidate_translation = Some(CandidateTranslation {
+            sequence,
+            candidate,
+        });
+        self.status = Some("模型正在重新生成译文…".to_owned());
+        self.await_prediction(None);
     }
 
     /// 这个应用里英文模式给不给候选：全局开关开着，且应用在 `[apps] english_candidates_on` 白名单里。
@@ -225,6 +246,7 @@ impl Host {
                 Vec::new()
             },
             footer,
+            pages_around: (page > 0, page + 1 < pages),
             sentence: self.sentence.clone(),
             status: self.status.clone(),
             mode: self.input_mode(),
@@ -234,10 +256,10 @@ impl Host {
         self.window.show(frame, self.anchor);
     }
 
-    /// 给候选窗口主题显示的输入状态：中英看 Caps Lock（与菜单栏一致），其余看配置；英文模式标点是半角。
+    /// 给候选窗口主题显示的输入状态：中英跟菜单栏一致（Caps Lock 或单击 Shift），其余看配置；英文模式标点是半角。
     pub(super) fn input_mode(&self) -> qingjian_render::Mode {
         let general = &self.settings.config().general;
-        let english = crate::imk::modifiers::caps_lock_on();
+        let english = self.english_mode();
         qingjian_render::Mode {
             english,
             traditional: general.traditional() != TraditionalVariant::Off,

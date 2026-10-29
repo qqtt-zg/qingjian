@@ -53,16 +53,19 @@ description: 青简数据文件夹的位置、每个文件记的是什么、运�
 - **Linux**：`~/.local/state/qingjian/logs`（设置了 `XDG_STATE_HOME` 时在它下面）。
 
 「设置 → 高级 → 日志文件」的「打开日志目录」直接打开它；「打包到桌面」把日志连同设置（抹去密钥）打成一个 zip，反馈时附上，见 [反馈问题](../help/feedback.md)。
-按天分文件，保留 7 天。缺省不记录输入的内容，打开「详细日志」后才逐键记录。
+按天分文件，保留 7 天。缺省不记录输入的内容，只记在哪个应用里打字、每段敲了几个键、上屏了几个字这类计数；打开「详细日志」后才逐键记录。
+
+Windows 后台的启动、受控退出及 Rust panic 位置都写入现有 `server.日期.log`，不另建日志文件。panic 正文不会写入。外部强制终止或原生异常仍可能来不及留下记录。
 
 ## 换用自己的本地整句模型
 
-本地整句模型（含章·通变）随包附带。要换用自己训练的模型，把 `hanzhang-tongbian-small.qjm` 放进数据文件夹的 `models/hanzhang-tongbian/`，重启输入法后优先使用：
+本地整句模型含章·通变在 macOS 与 Windows 上从「设置 → 实验功能」下载到下面的目录，Linux 版随包附带。要换用自己训练的模型，把 `hanzhang-tongbian-small.qjm` 放进数据文件夹的 `models/hanzhang-tongbian/`，重启输入法后优先使用：
 
 - **macOS**：`~/Library/Application Support/Qingjian/models/hanzhang-tongbian/`
 - **Windows**：`%APPDATA%\Qingjian\models\hanzhang-tongbian\`
 - **Linux**：`~/.local/share/qingjian/models/hanzhang-tongbian/`
 
-- 含章·知微（`hanzhang-zhiwei-small.qjm`，放在 `models/hanzhang-zhiwei/`）不再随包，在「设置 → 实验功能」下载，或自己放进这个目录后在实验功能里打开（`[model] name = "zhiwei"`）；它会参考光标前的几十个字重排候选。知意下载后在 `models/zhiyi/`（Windows 是 `models/zhiyi-onnx/`）。
+- 知意下载后在 `models/zhiyi/`（Windows 是 `models/zhiyi-onnx/`）。含章·知微已下线，`models/hanzhang-zhiwei/` 不再读取，可以删掉。
+- 知意输入法的词库模型（`zh.ngram`）目前不随包，只有 Windows 版会读：放进 `%APPDATA%\Qingjian\models\zhiyi-ngram\` 后重启输入法，整句和候选排序都会参考它；它认识而词库没收的词（摸鱼、老梗这类）也能打出来。放进去后第一次启动会多等一秒左右，在同一目录生成 `zh.words.qj`；之后直接读这个文件，换了模型或升级词库时会自动重新生成，删掉也没关系。
 - 旧版用过的 `model-p2c/` 与 `model/` 文件夹仍可读取；同一模型的新文件夹优先。
 - 直接导出的 `model.safetensors`、`config.json`、`vocab.json` 三个文件也能识别；同一文件夹里两种都有时优先用 `.qjm`。

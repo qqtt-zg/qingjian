@@ -1,5 +1,6 @@
 //! 主题里能写的矢量小图标（`"icon": "cloud"`），各自实现引擎的 [`bamboo_slip::Icon`]。
 
+mod chevron;
 mod cloud;
 mod gear;
 
@@ -8,11 +9,12 @@ use std::sync::{Arc, LazyLock};
 use serde::Deserialize;
 
 use crate::speaker::Speaker;
+use chevron::Chevron;
 use cloud::Cloud;
 use gear::Gear;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
-#[serde(rename_all = "lowercase")]
+#[serde(rename_all = "kebab-case")]
 pub(crate) enum Icon {
     /// 云联想的云朵。
     Cloud,
@@ -22,12 +24,24 @@ pub(crate) enum Icon {
 
     /// 译词的按需朗读按钮。
     Speaker,
+
+    /// 翻页箭头：上一页。
+    ChevronLeft,
+
+    /// 翻页箭头：下一页。
+    ChevronRight,
 }
 
 static CLOUD: LazyLock<Arc<dyn bamboo_slip::Icon>> = LazyLock::new(|| Arc::new(Cloud));
 
 static GEAR: LazyLock<Arc<dyn bamboo_slip::Icon>> = LazyLock::new(|| Arc::new(Gear));
 static SPEAKER: LazyLock<Arc<dyn bamboo_slip::Icon>> = LazyLock::new(|| Arc::new(Speaker));
+
+static CHEVRON_LEFT: LazyLock<Arc<dyn bamboo_slip::Icon>> =
+    LazyLock::new(|| Arc::new(Chevron { right: false }));
+
+static CHEVRON_RIGHT: LazyLock<Arc<dyn bamboo_slip::Icon>> =
+    LazyLock::new(|| Arc::new(Chevron { right: true }));
 
 impl Icon {
     /// 交给场景树画的那一个。
@@ -36,6 +50,8 @@ impl Icon {
             Self::Cloud => Arc::clone(&CLOUD),
             Self::Gear => Arc::clone(&GEAR),
             Self::Speaker => Arc::clone(&SPEAKER),
+            Self::ChevronLeft => Arc::clone(&CHEVRON_LEFT),
+            Self::ChevronRight => Arc::clone(&CHEVRON_RIGHT),
         }
     }
 }

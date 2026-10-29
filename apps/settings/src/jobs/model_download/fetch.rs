@@ -256,8 +256,8 @@ mod tests {
     use super::*;
 
     #[test]
-    #[ignore = "联网从模型仓库下 52 MB"]
-    fn downloads_and_installs_zhiwei() {
+    #[ignore = "联网从模型仓库下 43 MB"]
+    fn downloads_and_installs_tongbian() {
         let dir = std::env::temp_dir().join("qingjian-model-download-test");
         let _ = std::fs::remove_dir_all(&dir);
         let shared = Shared {
@@ -265,12 +265,15 @@ mod tests {
             cancel: AtomicBool::new(false),
             waker: None,
         };
-        let pack = Pack::of(LocalModel::Zhiwei).unwrap();
+        let pack = Pack::of(LocalModel::Tongbian).unwrap();
         run(pack, &dir, &shared).unwrap();
         let installed = pack.install_path(&dir);
-        assert!(installed.join("hanzhang-zhiwei-small.qjm").is_file());
+        assert!(installed.join("hanzhang-tongbian-small.qjm").is_file());
         assert!(installed.join("LICENSE").is_file());
-        assert!(!dir.join("models/.download-hanzhang-zhiwei-v1.0.0").exists());
+        assert!(
+            !dir.join("models/.download-hanzhang-tongbian-v1.0.0")
+                .exists()
+        );
         std::fs::remove_dir_all(&dir).unwrap();
     }
 

@@ -17,8 +17,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - `crates/qingjian-learning`：用户侧落盘：词频 / 用户词 / 个人 n-gram / 敲错表（`FrequencyLearner`）、输入日志（`InputLog`）、输入统计（`UsageStats`）、词汇记录（`VocabularyBook`）。
 - `crates/qingjian-predict`：云联想 `CloudPredictor`（OpenAI 兼容接口）与释义兜底 `CloudGlossFiller`；`PredictConfig` 是 `[predict]` 分节。
 - `crates/qingjian-voice`：云端语音识别，实现 Core 的 `Transcriber`；现在是火山引擎豆包流式语音识别 `VolcengineTranscriber`（WebSocket + rustls，后台线程）。
-- `crates/qingjian-lm`：整句转换的 bigram 语言模型 `BigramModel`。
-- `crates/qingjian-neural`：字级 Transformer 本地推理 `CharScorer`（candle），给整句前几条路径重打分。
+- `crates/qingjian-lm`：整句转换的 bigram 语言模型 `BigramModel`，另有读知意 `zh.ngram` 的 `TrigramModel` 与插值用的 `MixedModel`。
+- `crates/qingjian-neural`：本地神经模型推理，`hanzhang/`（含章字级 Transformer：`CharScorer` 打分、`P2c` 按拼音生成整句）与 `zhiyi/`（知意选词模型）。
 - `crates/qingjian-format`：`.qj` 数据容器（mmap 读、零拷贝视图、写入器、哈希索引）。
 - `crates/qingjian-platform`：平台层共用：`Config`（TOML 配置）、`extra_dictionaries`、`protocol` 线上类型（Windows Server ↔ DLL，以及 `protocol::linux` 的 Server ↔ 各前端）。
 - `crates/qingjian-render`：候选窗与状态条：帧数据 + 主题 → 场景树，画在 bamboo-slip 上，各平台只贴图。见 `docs/design/rendering.md`。
