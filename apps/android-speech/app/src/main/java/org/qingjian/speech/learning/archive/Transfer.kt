@@ -49,7 +49,7 @@ object Transfer {
                 require(ConnectionStatus.from(statusText) == ConnectionStatus.CONNECTED) {
                     "等待电脑连接；学习资料仍保存在手机"
                 }
-                val pair = Pairing.parse(speech.getString("url", "").orEmpty())
+                val pair = Pairing.parse(org.qingjian.speech.learning.ConnectionControls.activeUrl(speech))
                 val epoch = org.qingjian.speech.learning.daily.PlanStore(app).epoch()
                 prefs.edit().putString("transfer_status", "正在同步电脑来源…").apply()
 

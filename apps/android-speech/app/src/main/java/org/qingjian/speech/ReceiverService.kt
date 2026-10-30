@@ -1,50 +1,56 @@
-//! 用户启动的前台接收会话，HTTPS 长轮询；通知栏可停止，退出即释放连接和唤醒锁。
+//! 前台朗读与笔记事件接收服务；保持连接、重试、故障转移与系统通知。
 package org.qingjian.speech
 
-import android.app.Service
 import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
+import android.app.Service
 import android.content.Intent
-import android.os.IBinder
 import android.os.Handler
+import android.os.IBinder
 import android.os.Looper
 import android.os.PowerManager
 import java.net.HttpURLConnection
 import java.net.URL
-import java.util.concurrent.atomic.AtomicLong
-import org.json.JSONObject
 import java.util.concurrent.Executors
 import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.atomic.AtomicLong
+import org.json.JSONObject
+import org.qingjian.speech.learning.ConnectionControls
 
 class ReceiverService : Service() {
     private val generation = AtomicLong()
     @Volatile private var receiving = false
     @Volatile private var connection: HttpURLConnection? = null
     @Volatile private var destroyed = false
-    @Volatile private var retryDeadline=0L
-    private var lastLearningSync=0L
-    private fun retryWindow(run:Long){
-        retryDeadline=android.os.SystemClock.elapsedRealtime()+60_000
-        getSharedPreferences("speech",0).edit().putLong("retry_deadline",retryDeadline).putInt("retry_attempt",0).apply()
-        main.postDelayed(object:Runnable {override fun run(){
-            if(destroyed||generation.get()!=run||retryDeadline==0L)return
-            val remaining=retryDeadline-android.os.SystemClock.elapsedRealtime()
-            if(remaining>0){main.postDelayed(this,remaining);return}
-            generation.incrementAndGet();connection?.disconnect();retryDeadline=0L
-            reportConnection("连接超时，请手动重试");stopSelf()
-        }},60_000)
+    @Volatile private var retryDeadline = 0L
+    private var lastLearningSync = 0L
+
+    private fun retryWindow(run: Long) {
+        retryDeadline = android.os.SystemClock.elapsedRealtime() + 60_000
+        getSharedPreferences("speech", 0).edit().putLong("retry_deadline", retryDeadline).putInt("retry_attempt", 0).apply()
+        main.postDelayed(object : Runnable {
+            override fun run() {
+                if (destroyed || generation.get() != run || retryDeadline == 0L) return
+                val remaining = retryDeadline - android.os.SystemClock.elapsedRealtime()
+                if (remaining > 0) { main.postDelayed(this, remaining); return }
+                generation.incrementAndGet(); connection?.disconnect(); retryDeadline = 0L
+                reportConnection("连接超时，请手动重试"); stopSelf()
+            }
+        }, 60_000)
     }
+
     private lateinit var player: SpeechPlayer
     private var wake: PowerManager.WakeLock? = null
     private val main = Handler(Looper.getMainLooper())
-    private val acknowledgements=Executors.newSingleThreadExecutor()
-    private val ackQueued=AtomicBoolean(false)
-    private val ackDirty=AtomicBoolean(false)
-    @Volatile private var currentPair:Pairing?=null
-    @Volatile private var controlRevision=-1L
-    @Volatile private var remoteEnabled=true
+    private val acknowledgements = Executors.newSingleThreadExecutor()
+    private val ackQueued = AtomicBoolean(false)
+    private val ackDirty = AtomicBoolean(false)
+    @Volatile private var currentPair: Pairing? = null
+    @Volatile private var controlRevision = -1L
+    @Volatile private var remoteEnabled = true
+
     override fun onBind(intent: Intent?): IBinder? = null
 
     override fun onCreate() {
@@ -52,7 +58,7 @@ class ReceiverService : Service() {
         BundledVoice.initializeSelection(this)
         getSystemService(NotificationManager::class.java).createNotificationChannel(NotificationChannel("speech", "朗读连接", NotificationManager.IMPORTANCE_LOW))
         player = SpeechPlayer(this, {
-            if(!destroyed) getSharedPreferences("speech",0).edit().putString("last_playback",it).apply()
+            if (!destroyed) getSharedPreferences("speech", 0).edit().putString("last_playback", it).apply()
             report(it)
         }, { main.post { if (!receiving && !destroyed && player.isIdle()) stopSelf() } })
     }
@@ -66,117 +72,189 @@ class ReceiverService : Service() {
         }
         if (intent?.action == "word") {
             val text = intent.getStringExtra("text").orEmpty()
-            if(text.isNotBlank() && text.length <= 500) player.submit(text, learn = true)
-            else if(!receiving) stopSelf()
+            if (text.isNotBlank() && text.length <= 500) player.submit(text, learn = true)
+            else if (!receiving) stopSelf()
             return START_NOT_STICKY
         }
-        val pair = try { Pairing.parse(getSharedPreferences("speech",0).getString("url", "") ?: "") }
+        val prefs = getSharedPreferences("speech", 0)
+        val rawUrl = ConnectionControls.activeUrl(prefs)
+        val pair = try { Pairing.parse(rawUrl) }
         catch (_: Exception) { reportConnection("配对地址无效，请重新粘贴"); stopSelf(); return START_NOT_STICKY }
         val run = generation.incrementAndGet()
         connection?.disconnect()
-        controlRevision=-1L
-        currentPair=pair
+        controlRevision = prefs.getLong("control_revision.${pair.host}", -1L)
+        currentPair = pair
         receiving = true
         retryWindow(run)
         reportConnection("正在连接电脑…")
         if (wake == null) {
-            wake = getSystemService(PowerManager::class.java).newWakeLock(PowerManager.PARTIAL_WAKE_LOCK,"qingjian:speech-session").apply { acquire() }
+            wake = getSystemService(PowerManager::class.java).newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "qingjian:speech-session").apply { acquire() }
         }
-        Thread({ receive(pair,run) }, "qingjian-receiver").start()
+        Thread({ receive(pair, run) }, "qingjian-receiver").start()
         return START_NOT_STICKY
     }
 
-    private fun receive(pair: Pairing, run: Long) {
-        var after: Long? = null
+    private fun receive(initialPair: Pairing, run: Long) {
+        var pair = initialPair
+        val prefs = getSharedPreferences("speech", 0)
+        val initialSavedSeq = prefs.getLong("sequence.${pair.host}", -1L)
+        var after: Long? = if (initialSavedSeq >= 0) initialSavedSeq else null
         var delay = 1500L
         var reconnecting = false
+
         while (!destroyed && generation.get() == run) {
             try {
                 val path = after?.let { "/api/events?after=$it&control_after=$controlRevision" } ?: "/api/status"
-                val response = fetch(pair,path,run)
+                val response = fetch(pair, path, run)
                 if (generation.get() != run || destroyed) break
-                require(response.getLong("sequence") in 0..9007199254740991L)
-                response.optJSONObject("control")?.let {control->
-                    require(control.getLong("revision")>=0)
+                val remoteSeq = response.getLong("sequence")
+                require(remoteSeq in 0..9007199254740991L)
+                response.optJSONObject("control")?.let { control ->
+                    require(control.getLong("revision") >= 0)
                     control.getBoolean("enabled")
                 }
-                retryDeadline=0L
-                getSharedPreferences("speech",0).edit().putLong("retry_deadline",0).apply()
-                response.optJSONObject("control")?.let {applyControl(it,pair,run)}
-                if(reconnecting) {
-                    if(after != null) reportCurrentConnection(if(remoteEnabled) "已连接，继续接收朗读" else "电脑已暂停朗读，连接保留",run)
+                retryDeadline = 0L
+                prefs.edit().putLong("retry_deadline", 0).apply()
+                response.optJSONObject("control")?.let { applyControl(it, pair, run) }
+                if (reconnecting) {
+                    if (after != null) reportCurrentConnection(if (remoteEnabled) "已连接，继续接收朗读" else "电脑已暂停朗读，连接保留", run)
                     reconnecting = false
                 }
                 if (after == null) {
-                    after = response.getLong("sequence")
+                    val saved = prefs.getLong("sequence.${pair.host}", -1L)
+                    after = if (saved == -1L || saved > remoteSeq) remoteSeq else saved
                     org.qingjian.speech.update.UpdateClient.check(this)
-                    reportCurrentConnection(if(remoteEnabled) "已连接，可锁屏；等待电脑点击喇叭" else "电脑已暂停朗读，连接保留",run)
+                    reportCurrentConnection(if (remoteEnabled) "已连接，可锁屏；等待电脑点击喇叭" else "电脑已暂停朗读，连接保留", run)
                 } else {
-                    val next = response.getLong("sequence")
+                    val next = remoteSeq
                     if (next > after) {
                         after = next
+                        prefs.edit().putLong("sequence.${pair.host}", next).apply()
                         val text = response.optString("text")
                         if (text.isNotBlank() && text.length <= 500 && remoteEnabled) {
-                            val time=java.text.DateFormat.getTimeInstance().format(java.util.Date())
-                            getSharedPreferences("speech",0).edit().putString("last_receive","$time 已收到朗读请求（序号 $next）").apply()
+                            val time = java.text.DateFormat.getTimeInstance().format(java.util.Date())
+                            prefs.edit().putString("last_receive", "$time 已收到朗读请求（序号 $next）").apply()
                             runCatching { org.qingjian.speech.learning.LearningStore.get(this).record(text) }
                             player.submit(text, learn = true)
                         }
+                    } else if (next < after) {
+                        // 对端序号发生重置（例如对端重新配对），执行自愈校准，避免死锁
+                        after = next
+                        prefs.edit().putLong("sequence.${pair.host}", next).apply()
                     }
                 }
                 acknowledge()
-                if(android.os.SystemClock.elapsedRealtime()-lastLearningSync>30_000){lastLearningSync=android.os.SystemClock.elapsedRealtime();main.post {if(!destroyed&&generation.get()==run)org.qingjian.speech.learning.archive.Transfer.run(this)}}
-                delay = 1500
+                if (android.os.SystemClock.elapsedRealtime() - lastLearningSync > 30_000) {
+                    lastLearningSync = android.os.SystemClock.elapsedRealtime()
+                    main.post { if (!destroyed && generation.get() == run) org.qingjian.speech.learning.archive.Transfer.run(this) }
+                }
+                delay = 1500L
             } catch (_: SecurityException) {
-                if (generation.get() == run && !destroyed) main.post { if(generation.get() == run && !destroyed) { reportConnection("配对已失效，请粘贴电脑的新地址"); stopSelf() } }
+                if (generation.get() == run && !destroyed) main.post {
+                    if (generation.get() == run && !destroyed) { reportConnection("配对已失效，请粘贴电脑的新地址"); stopSelf() }
+                }
                 break
             } catch (_: Exception) {
                 if (generation.get() != run || destroyed) break
-                if(retryDeadline==0L)retryWindow(run)
-                val retryPrefs=getSharedPreferences("speech",0)
-                retryPrefs.edit().putInt("retry_attempt",retryPrefs.getInt("retry_attempt",0)+1).apply()
+                if (retryDeadline == 0L) retryWindow(run)
+                val retryPrefs = getSharedPreferences("speech", 0)
+                retryPrefs.edit().putInt("retry_attempt", retryPrefs.getInt("retry_attempt", 0) + 1).apply()
+
+                // 故障转移探测：在 60s 窗口内探测其他已配对电脑
+                val candidates = ConnectionControls.loadPairings(prefs).filter { it.host != pair.host }
+                var failoverSuccess = false
+                for (cand in candidates) {
+                    if (destroyed || generation.get() != run) break
+                    val candPair = runCatching { Pairing.parse(cand.url) }.getOrNull() ?: continue
+                    val status = probeStatus(candPair, run) ?: continue
+                    val candSeq = status.optLong("sequence", -1L)
+                    if (candSeq >= 0) {
+                        val candHost = candPair.host
+                        val savedSeq = prefs.getLong("sequence.$candHost", -1L)
+                        after = if (savedSeq == -1L || savedSeq > candSeq) candSeq else savedSeq
+                        controlRevision = prefs.getLong("control_revision.$candHost", -1L)
+                        pair = candPair
+                        currentPair = candPair
+                        prefs.edit()
+                            .putString("active", cand.url)
+                            .putString("url", cand.url)
+                            .apply()
+                        reportCurrentConnection("已切换至电脑 $candHost", run)
+                        reconnecting = false
+                        delay = 1500L
+                        failoverSuccess = true
+                        break
+                    }
+                }
+                if (failoverSuccess) {
+                    continue
+                }
+
                 reconnecting = true
-                reportCurrentConnection("网络中断，正在重新连接…",run)
+                reportCurrentConnection("网络中断，正在重新连接…", run)
                 try { Thread.sleep(delay) } catch (_: InterruptedException) { break }
-                delay = (delay * 2).coerceAtMost(15000)
+                delay = (delay * 2).coerceAtMost(15000L)
             }
         }
     }
 
-    private fun applyControl(control:JSONObject,pair:Pairing,run:Long) {
-        val revision=control.getLong("revision")
-        if(revision==controlRevision) return
-        remoteEnabled=control.getBoolean("enabled")
-        reportCurrentConnection(if(remoteEnabled) "已连接，朗读接收中" else "电脑已暂停朗读，连接保留",run)
-        getSharedPreferences("speech",0).edit().putBoolean("remote_enabled",remoteEnabled).apply()
-        if(!remoteEnabled) player.cancelPending()
-        controlRevision=revision
-        if(!remoteEnabled) reportCurrentConnection("电脑已暂停朗读，连接保留",run)
+    private fun probeStatus(candidate: Pairing, run: Long): JSONObject? = runCatching {
+        if (destroyed || generation.get() != run) return null
+        val http = URL(candidate.base + "/api/status").openConnection() as HttpURLConnection
+        try {
+            http.instanceFollowRedirects = false
+            http.connectTimeout = 2000
+            http.readTimeout = 2000
+            http.setRequestProperty("Authorization", "Bearer ${candidate.token}")
+            if (http.responseCode == 200) {
+                val bytes = http.inputStream.use { it.readBytes() }
+                JSONObject(String(bytes, Charsets.UTF_8))
+            } else null
+        } finally {
+            http.disconnect()
+        }
+    }.getOrNull()
+
+    private fun applyControl(control: JSONObject, pair: Pairing, run: Long) {
+        val revision = control.getLong("revision")
+        if (revision == controlRevision) return
+        remoteEnabled = control.getBoolean("enabled")
+        reportCurrentConnection(if (remoteEnabled) "已连接，朗读接收中" else "电脑已暂停朗读，连接保留", run)
+        val prefs = getSharedPreferences("speech", 0)
+        prefs.edit()
+            .putBoolean("remote_enabled", remoteEnabled)
+            .putLong("control_revision.${pair.host}", revision)
+            .apply()
+        if (!remoteEnabled) player.cancelPending()
+        controlRevision = revision
+        if (!remoteEnabled) reportCurrentConnection("电脑已暂停朗读，连接保留", run)
     }
 
     private fun acknowledge() {
-        if(destroyed || currentPair==null) return
+        if (destroyed || currentPair == null) return
         ackDirty.set(true)
-        if(!ackQueued.compareAndSet(false,true)) return
-        runCatching { acknowledgements.execute {
-            try {
-                while(ackDirty.getAndSet(false) && !destroyed) {
-                    val pair=currentPair ?: break
-                    val prefs=getSharedPreferences("speech",0)
-                    val data=JSONObject().put("status",prefs.getString("status","已连接"))
-                        .put("control_revision",controlRevision)
-                    val http=URL(pair.base+"/api/device").openConnection() as HttpURLConnection
-                    try {
-                        http.instanceFollowRedirects=false;http.connectTimeout=5000;http.readTimeout=5000
-                        http.requestMethod="POST";http.doOutput=true
-                        http.setRequestProperty("Authorization","Bearer ${pair.token}")
-                        http.setRequestProperty("Content-Type","application/json")
-                        http.outputStream.use {it.write(data.toString().toByteArray(Charsets.UTF_8))}
-                        http.responseCode
-                    } catch(_:Exception) {} finally {http.disconnect()}
-                }
-            } finally {ackQueued.set(false);if(ackDirty.get() && !destroyed) acknowledge()}
-        } }
+        if (!ackQueued.compareAndSet(false, true)) return
+        runCatching {
+            acknowledgements.execute {
+                try {
+                    while (ackDirty.getAndSet(false) && !destroyed) {
+                        val pair = currentPair ?: break
+                        val prefs = getSharedPreferences("speech", 0)
+                        val data = JSONObject().put("status", prefs.getString("status", "已连接"))
+                            .put("control_revision", controlRevision)
+                        val http = URL(pair.base + "/api/device").openConnection() as HttpURLConnection
+                        try {
+                            http.instanceFollowRedirects = false; http.connectTimeout = 5000; http.readTimeout = 5000
+                            http.requestMethod = "POST"; http.doOutput = true
+                            http.setRequestProperty("Authorization", "Bearer ${pair.token}")
+                            http.setRequestProperty("Content-Type", "application/json")
+                            http.outputStream.use { it.write(data.toString().toByteArray(Charsets.UTF_8)) }
+                            http.responseCode
+                        } catch (_: Exception) {} finally { http.disconnect() }
+                    }
+                } finally { ackQueued.set(false); if (ackDirty.get() && !destroyed) acknowledge() }
+            }
+        }
     }
 
     private fun fetch(pair: Pairing, path: String, run: Long): JSONObject {
@@ -192,37 +270,40 @@ class ReceiverService : Service() {
             val bytes = http.inputStream.use { input ->
                 val buffer = java.io.ByteArrayOutputStream()
                 val block = ByteArray(2048)
-                while(true) {
+                while (true) {
                     val count = input.read(block)
-                    if(count < 0) break
+                    if (count < 0) break
                     check(buffer.size() + count <= 16384)
-                    buffer.write(block,0,count)
+                    buffer.write(block, 0, count)
                 }
                 buffer.toByteArray()
             }
             check(bytes.size <= 16384)
-            return JSONObject(String(bytes,Charsets.UTF_8))
+            return JSONObject(String(bytes, Charsets.UTF_8))
         } finally { http.disconnect(); if (connection === http) connection = null }
     }
 
     private fun notification(message: String): Notification {
-        val open = PendingIntent.getActivity(this,0,Intent(this,MainActivity::class.java),PendingIntent.FLAG_IMMUTABLE)
-        val stop = PendingIntent.getService(this,1,Intent(this,ReceiverService::class.java).setAction("stop"),PendingIntent.FLAG_IMMUTABLE)
-        return Notification.Builder(this,"speech").setContentTitle("青简朗读").setContentText(message)
+        val open = PendingIntent.getActivity(this, 0, Intent(this, MainActivity::class.java), PendingIntent.FLAG_IMMUTABLE)
+        val stop = PendingIntent.getService(this, 1, Intent(this, ReceiverService::class.java).setAction("stop"), PendingIntent.FLAG_IMMUTABLE)
+        return Notification.Builder(this, "speech").setContentTitle("青简朗读").setContentText(message)
             .setSmallIcon(android.R.drawable.ic_lock_silent_mode_off).setContentIntent(open)
-            .addAction(Notification.Action.Builder(null,"停止",stop).build()).setOngoing(true).build()
+            .addAction(Notification.Action.Builder(null, "停止", stop).build()).setOngoing(true).build()
     }
 
     private fun reportConnection(message: String) {
-        if(destroyed) return
+        if (destroyed) return
         getSharedPreferences("speech", 0).edit().putString("connection_status", message).apply()
         report(message)
     }
-    private fun reportCurrentConnection(message:String,run:Long){main.post {if(!destroyed&&generation.get()==run&&receiving)reportConnection(message)}}
+
+    private fun reportCurrentConnection(message: String, run: Long) {
+        main.post { if (!destroyed && generation.get() == run && receiving) reportConnection(message) }
+    }
 
     private fun report(message: String) {
         if (destroyed) return
-        getSharedPreferences("speech",0).edit().putString("status",message).apply()
+        getSharedPreferences("speech", 0).edit().putString("status", message).apply()
         acknowledge()
         if (android.os.Build.VERSION.SDK_INT < 33 || checkSelfPermission(android.Manifest.permission.POST_NOTIFICATIONS) == android.content.pm.PackageManager.PERMISSION_GRANTED) {
             getSystemService(NotificationManager::class.java).notify(1, notification(message))
@@ -234,11 +315,11 @@ class ReceiverService : Service() {
         main.removeCallbacksAndMessages(null)
         org.qingjian.speech.learning.archive.Transfer.cancel()
         connection?.disconnect(); player.close()
-        acknowledgements.shutdownNow();currentPair=null
+        acknowledgements.shutdownNow(); currentPair = null
         wake?.let { if (it.isHeld) it.release() }; wake = null
         val preferences = getSharedPreferences("speech", 0)
         val previous = preferences.getString("connection_status", "").orEmpty()
-        val connectionStatus = if(previous.contains("失效") || previous.contains("无效") || previous.contains("超时")) previous else "已停止接收"
+        val connectionStatus = if (previous.contains("失效") || previous.contains("无效") || previous.contains("超时")) previous else "已停止接收"
         preferences.edit().putString("status", "已停止").putString("connection_status", connectionStatus).apply()
         stopForeground(STOP_FOREGROUND_REMOVE)
         super.onDestroy()

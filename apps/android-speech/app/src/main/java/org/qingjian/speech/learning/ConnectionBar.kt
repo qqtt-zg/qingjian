@@ -93,7 +93,7 @@ class ConnectionBar(
             statusView.contentDescription = if(state in listOf(ConnectionStatus.CONNECTED,ConnectionStatus.CONNECTING))"电脑${state.label}，点击停止连接" else "重新连接电脑，配对失效时请扫码"
             if(state==ConnectionStatus.CONNECTING)statusView.contentDescription="正在连接，已重试${preferences.getInt("retry_attempt",0)}次，剩余${remaining}秒，点击停止连接"
         }
-        reconnectButton.isEnabled = runCatching { Pairing.parse(preferences.getString("url", "").orEmpty()) }.isSuccess
+        reconnectButton.isEnabled = ConnectionControls.activeUrl(preferences).isNotBlank()
         reconnectButton.alpha = if(reconnectButton.isEnabled) 1f else 0.35f
     }
 }

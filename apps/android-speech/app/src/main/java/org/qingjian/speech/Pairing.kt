@@ -4,6 +4,9 @@ package org.qingjian.speech
 import java.net.URI
 
 data class Pairing(val base: String, val token: String) {
+    val host: String
+        get() = runCatching { URI(base).host.orEmpty() }.getOrDefault("")
+
     companion object {
         fun parse(value: String): Pairing {
             val uri = URI(value.trim())

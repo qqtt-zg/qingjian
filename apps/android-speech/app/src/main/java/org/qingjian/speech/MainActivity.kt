@@ -118,11 +118,11 @@ open class MainActivity : ComponentActivity() {
 
     private fun savePairingAddress() {
         val value = address.text.toString().trim()
-        try {
-            Pairing.parse(value)
-            getSharedPreferences("speech", 0).edit().putString("url", value).apply()
-            Toast.makeText(this, "配对地址已保存，点击常驻条重连图标生效", Toast.LENGTH_LONG).show()
-        } catch (_: Exception) { address.error = "请填写电脑配对页的完整 HTTPS 地址" }
+        if (connectionControls.connect(value)) {
+            Toast.makeText(this, "配对地址已保存并正在连接", Toast.LENGTH_LONG).show()
+        } else {
+            address.error = "请填写电脑配对页的完整 HTTPS 地址"
+        }
     }
 
     private fun applyGain(percent: Int, fromUser: Boolean = false) {

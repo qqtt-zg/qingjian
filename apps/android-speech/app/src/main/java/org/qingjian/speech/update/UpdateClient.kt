@@ -131,7 +131,8 @@ object UpdateClient {
         val data = checkNotNull(metadata(app))
         validateMetadata(app, data)
         val source = Pairing.parse(prefs(app).getString("source", "").orEmpty())
-        require(source == pair(app)) { "配对已变化，请重新检查更新" }
+        val known = org.qingjian.speech.learning.ConnectionControls.loadPairings(prefs(app))
+        require(source == pair(app) || known.any { it.host == source.host }) { "配对已变化，请重新检查更新" }
         val folder = File(app.cacheDir, "updates").apply { mkdirs() }
         val destination = archiveFile(app, data)
         val partial = File(folder, destination.name + ".part")
