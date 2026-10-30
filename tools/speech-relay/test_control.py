@@ -1,6 +1,5 @@
-"""管理与手机权限分离、暂停、控制唤醒和受配对保护的包下载。"""
+"""管理与手机权限分离、暂停、控制唤醒和受保护的管理接口测试。"""
 
-import hashlib
 import http.client
 import json
 from pathlib import Path
@@ -11,15 +10,13 @@ from unittest.mock import patch
 
 from server import SpeechServer, SpeechState
 from speech_control import SpeechControl
-from voice_packs import VoicePacks
 
 
 class ControlTests(unittest.TestCase):
     def setUp(self):
         self.directory = tempfile.TemporaryDirectory()
         self.root = Path(self.directory.name)
-        self.packs = VoicePacks(self.root / "packs")
-        self.control = SpeechControl(self.root, self.packs)
+        self.control = SpeechControl(self.root)
         self.state = SpeechState("a" * 32, [], control=self.control)
         self.server = SpeechServer(("127.0.0.1", 0), self.state)
         self.thread = threading.Thread(target=self.server.serve_forever, daemon=True)
@@ -53,40 +50,39 @@ class ControlTests(unittest.TestCase):
             self.assertEqual(self.request("GET", "/api/admin", self.state.publish_token)[0], 403)
 
     def test_control_changes_wake_poll_and_pause_rejects_speech(self):
-        self.assertEqual(self.request("POST", "/api/admin/control", self.state.publish_token, {"speaker": 3, "enabled": False})[0], 200)
+        self.assertEqual(self.request("POST", "/api/admin/control", self.state.publish_token, {"enabled": False})[0], 200)
         status, raw = self.request("GET", "/api/events?after=0&control_after=0", self.state.token)
         self.assertEqual(status, 200)
-        self.assertEqual(json.loads(raw)["control"]["speaker"], 3)
+        self.assertFalse(json.loads(raw)["control"]["enabled"])
         self.assertEqual(self.request("POST", "/api/speech", self.state.publish_token, "hello", True)[0], 409)
         self.assertEqual(self.state.sequence, 0)
 
     def test_device_acknowledgement_exposes_status_but_not_publish_token(self):
-        data = {"status": "音色已就绪", "catalog": [{"id": "builtin", "speakers": 8}], "active_pack": "builtin", "active_speaker": 1, "control_revision": 0}
+        data = {"status": "音色已就绪", "control_revision": 0}
         self.assertEqual(self.request("POST", "/api/device", self.state.token, data)[0], 200)
         status, raw = self.request("GET", "/api/admin", self.state.publish_token)
         self.assertEqual(status, 200)
         state = json.loads(raw)
         self.assertTrue(state["phone_connected"])
-        self.assertEqual(state["control"]["speaker"], 1)
+        self.assertEqual(state["phone_status"], "音色已就绪")
         self.assertNotIn(self.state.publish_token.encode(), raw)
-        self.assertEqual(self.request("POST", "/api/device", self.state.token, {"catalog": [{"id": "../../escape", "speakers": 1}]})[0], 400)
 
-    def test_model_package_download_requires_phone_auth_and_is_exact(self):
-        folder = self.root / "vits-example"
-        folder.mkdir()
-        (folder / "model.onnx").write_bytes(b"synthetic model")
-        (folder / "tokens.txt").write_text("synthetic tokens")
-        info = self.packs.add(folder)
-        path = "/api/packs/" + info["id"]
-        self.assertEqual(self.request("GET", path)[0], 401)
-        self.assertEqual(self.request("GET", path, self.state.publish_token)[0], 401)
-        status, raw = self.request("GET", path, self.state.token)
-        self.assertEqual(status, 200)
-        self.assertEqual(hashlib.sha256(raw).hexdigest(), info["id"])
-        self.assertEqual(self.request("GET", "/api/packs/../../server.py", self.state.token)[0], 404)
-        status, raw = self.request("GET", path + "/meta", self.state.token)
-        self.assertEqual(json.loads(raw)["sha256"], info["id"])
+    def test_legacy_control_json_with_pack_fields_is_silently_tolerated(self):
+        legacy = self.root / "legacy"
+        legacy.mkdir()
+        (legacy / "control.json").write_text(json.dumps({
+            "revision": 2, "enabled": True, "pack": "builtin", "speaker": 3, "allow_notes": True
+        }), encoding="utf-8")
+        control = SpeechControl(legacy)
+        snap = control.snapshot()
+        self.assertEqual(snap["revision"], 2)
+        self.assertTrue(snap["enabled"])
+        self.assertTrue(snap["allow_notes"])
 
     def test_only_admin_can_stop_service(self):
         self.assertEqual(self.request("POST", "/api/admin/stop", self.state.publish_token, {})[0], 200)
-        self.assertTrue(self.state.stopping.is_set())
+        self.assertTrue(self.state.stopping.wait(timeout=1))
+
+
+if __name__ == "__main__":
+    unittest.main()

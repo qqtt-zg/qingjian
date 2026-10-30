@@ -17,6 +17,10 @@ pub struct Snapshot {
     pub(crate) choices: Vec<(String, String)>,
 
     pub(crate) selected: String,
+
+    pub(crate) autostart: bool,
+
+    pub(crate) has_named_config: bool,
 }
 
 impl Snapshot {
@@ -55,6 +59,8 @@ impl Snapshot {
             qr: string("qr_path"),
             choices,
             selected: string("selected"),
+            autostart: boolean("autostart"),
+            has_named_config: boolean("has_named_config"),
         })
     }
 }

@@ -5,7 +5,7 @@ import subprocess
 import unittest
 from unittest.mock import Mock, patch
 
-from tunnel import QuickTunnel
+from tunnel import QuickTunnel, NamedTunnel
 
 
 class QuickTunnelTests(unittest.TestCase):
@@ -46,6 +46,47 @@ class QuickTunnelTests(unittest.TestCase):
         tunnel.close()
         tunnel.process.terminate.assert_called_once()
         tunnel.process.kill.assert_called_once()
+
+
+class NamedTunnelTests(unittest.TestCase):
+    def process(self, output):
+        process = Mock()
+        process.stdout = io.StringIO(output)
+        process.poll.return_value = None
+        return process
+
+    def test_named_tunnel_accepts_registered_connection_log_and_sets_token_env(self):
+        tunnel = NamedTunnel("cloudflared", "speech.qingjian.app", "eyJhIjoiZXhhbXBsZSJ9")
+        process = self.process("INF Starting tunnel\nINF Registered tunnel connection connIndex=0 protocol=http2\n")
+        with patch("tunnel.shutil.which", return_value="cloudflared"), \
+                patch("tunnel.subprocess.Popen", return_value=process) as spawn:
+            url = tunnel.start()
+            self.assertEqual(url, "https://speech.qingjian.app")
+            self.assertEqual(spawn.call_args.kwargs["env"].get("TUNNEL_TOKEN"), "eyJhIjoiZXhhbXBsZSJ9")
+            tunnel.close()
+        process.terminate.assert_called_once()
+
+    def test_named_tunnel_identifies_invalid_token(self):
+        tunnel = NamedTunnel("cloudflared", "speech.qingjian.app", "bad-token")
+        process = self.process("Provided Tunnel token is not valid.\n")
+        process.poll.return_value = 1
+        with patch("tunnel.shutil.which", return_value="cloudflared"), \
+                patch("tunnel.subprocess.Popen", return_value=process):
+            with self.assertRaises(RuntimeError) as context:
+                tunnel.start()
+            self.assertIn("令牌格式无效", str(context.exception))
+            tunnel.close()
+
+    def test_named_tunnel_identifies_deleted_tunnel(self):
+        tunnel = NamedTunnel("cloudflared", "speech.qingjian.app", "eyJhIjoiZXhhbXBsZSJ9")
+        process = self.process("INF Starting tunnel\nERR Register tunnel error: Failed to get tunnel\n")
+        process.poll.return_value = 1
+        with patch("tunnel.shutil.which", return_value="cloudflared"), \
+                patch("tunnel.subprocess.Popen", return_value=process):
+            with self.assertRaises(RuntimeError) as context:
+                tunnel.start()
+            self.assertIn("未找到该隧道", str(context.exception))
+            tunnel.close()
 
 
 if __name__ == "__main__":

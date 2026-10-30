@@ -45,14 +45,12 @@ class ReceiverService : Service() {
     @Volatile private var currentPair:Pairing?=null
     @Volatile private var controlRevision=-1L
     @Volatile private var remoteEnabled=true
-    private lateinit var transfer:PackTransfer
     override fun onBind(intent: Intent?): IBinder? = null
 
     override fun onCreate() {
         super.onCreate()
         BundledVoice.initializeSelection(this)
         getSystemService(NotificationManager::class.java).createNotificationChannel(NotificationChannel("speech", "朗读连接", NotificationManager.IMPORTANCE_LOW))
-        transfer=PackTransfer(this,{destroyed},{report(it)})
         player = SpeechPlayer(this, {
             if(!destroyed) getSharedPreferences("speech",0).edit().putString("last_playback",it).apply()
             report(it)
@@ -76,8 +74,6 @@ class ReceiverService : Service() {
         catch (_: Exception) { reportConnection("配对地址无效，请重新粘贴"); stopSelf(); return START_NOT_STICKY }
         val run = generation.incrementAndGet()
         connection?.disconnect()
-        transfer.close()
-        transfer=PackTransfer(this,{destroyed || generation.get()!=run},{if(!destroyed && generation.get()==run) report(it)})
         controlRevision=-1L
         currentPair=pair
         receiving = true
@@ -103,8 +99,6 @@ class ReceiverService : Service() {
                 response.optJSONObject("control")?.let {control->
                     require(control.getLong("revision")>=0)
                     control.getBoolean("enabled")
-                    val pack=control.getString("pack");require(pack=="builtin"||pack.matches(Regex("[a-f0-9]{64}")))
-                    require(control.getInt("speaker") in 0..1023)
                 }
                 retryDeadline=0L
                 getSharedPreferences("speech",0).edit().putLong("retry_deadline",0).apply()
@@ -156,27 +150,7 @@ class ReceiverService : Service() {
         reportCurrentConnection(if(remoteEnabled) "已连接，朗读接收中" else "电脑已暂停朗读，连接保留",run)
         getSharedPreferences("speech",0).edit().putBoolean("remote_enabled",remoteEnabled).apply()
         if(!remoteEnabled) player.cancelPending()
-        val pack=control.getString("pack")
-        val speaker=control.getInt("speaker")
-        require(speaker in 0..1023)
-        if(pack!="builtin") {
-            VoiceLibrary.directory(this,pack)
-            try {
-                transfer.install(pair,pack,fetch(pair,"/api/packs/$pack/meta",run))
-            } catch(error:Exception) {
-                if(!destroyed && generation.get()==run) {
-                    report("音色传输失败（${error.javaClass.simpleName}），保留当前音色")
-                    controlRevision=revision
-                }
-                return
-            }
-        }
-        if(destroyed || generation.get()!=run) return
-        val prefs=getSharedPreferences("speech",0)
-        val changed=prefs.getString("pack","builtin")!=pack || prefs.getInt("voice",0)!=speaker
-        prefs.edit().putString("pack",pack).putInt("voice",speaker).apply()
         controlRevision=revision
-        if(changed) player.configure()
         if(!remoteEnabled) reportCurrentConnection("电脑已暂停朗读，连接保留",run)
     }
 
@@ -190,8 +164,7 @@ class ReceiverService : Service() {
                     val pair=currentPair ?: break
                     val prefs=getSharedPreferences("speech",0)
                     val data=JSONObject().put("status",prefs.getString("status","已连接"))
-                        .put("catalog",VoiceLibrary.catalog(this)).put("active_pack",prefs.getString("pack","builtin"))
-                        .put("active_speaker",prefs.getInt("voice",0)).put("control_revision",controlRevision)
+                        .put("control_revision",controlRevision)
                     val http=URL(pair.base+"/api/device").openConnection() as HttpURLConnection
                     try {
                         http.instanceFollowRedirects=false;http.connectTimeout=5000;http.readTimeout=5000
@@ -261,7 +234,7 @@ class ReceiverService : Service() {
         main.removeCallbacksAndMessages(null)
         org.qingjian.speech.learning.archive.Transfer.cancel()
         connection?.disconnect(); player.close()
-        transfer.close();acknowledgements.shutdownNow();currentPair=null
+        acknowledgements.shutdownNow();currentPair=null
         wake?.let { if (it.isHeld) it.release() }; wake = null
         val preferences = getSharedPreferences("speech", 0)
         val previous = preferences.getString("connection_status", "").orEmpty()

@@ -8,9 +8,8 @@ use bamboo_slip::{
     section_title,
 };
 
-use crate::message::{Message, Popup};
+use crate::message::Message;
 use crate::view::Page;
-use crate::view::parts::controls::select;
 
 pub fn speech(ui: &mut Ui<Message>, page: &Page) -> Result<Vec<NodeId>, RenderError> {
     let job = &page.settings.speech;
@@ -172,10 +171,39 @@ pub fn speech(ui: &mut Ui<Message>, page: &Page) -> Result<Vec<NodeId>, RenderEr
         conn_rows.push(qr_row);
     }
 
+    let autostart_switch = Switch::new(state.autostart)
+        .disabled(!available || !state.has_named_config)
+        .build(
+            ui,
+            theme,
+            "speech-autostart",
+            Message::Speech(
+                if state.autostart {
+                    "autostart-disable"
+                } else {
+                    "autostart-enable"
+                },
+                None,
+            ),
+        )?;
+
+    let autostart_detail = if state.has_named_config {
+        "开机后在后台静默启动命名隧道中继，无需每次打开设置"
+    } else {
+        "未配置命名隧道：配置固定隧道后可开启开机自启"
+    };
+
+    let autostart_row = SettingRow::new("开机自动连接")
+        .detail(autostart_detail)
+        .control(autostart_switch)
+        .build(ui, theme)?;
+
+    conn_rows.push(autostart_row);
+
     out.push(group(ui, theme, &conn_rows)?);
 
-    // 2. 朗读与音色
-    out.push(section_title(ui, theme, "朗读与音色")?);
+    // 2. 朗读控制
+    out.push(section_title(ui, theme, "朗读控制")?);
 
     let switch = Switch::new(state.enabled)
         .disabled(!available || !state.running)
@@ -185,28 +213,6 @@ pub fn speech(ui: &mut Ui<Message>, page: &Page) -> Result<Vec<NodeId>, RenderEr
             "speech-enabled",
             Message::Speech(if state.enabled { "pause" } else { "enable" }, None),
         )?;
-
-    let selected = state
-        .choices
-        .iter()
-        .find(|(key, _)| *key == state.selected)
-        .map(|(_, label)| label.as_str())
-        .unwrap_or("请先连接手机");
-
-    let options: Vec<&str> = state
-        .choices
-        .iter()
-        .map(|(_, label)| label.as_str())
-        .collect();
-
-    let voices = select(
-        ui,
-        page,
-        Popup::SpeechVoice,
-        (selected, &options),
-        230.0,
-        !available || !state.running,
-    )?;
 
     let preview = Button::new("在手机试听")
         .disabled(!available || !state.running || !state.enabled)
@@ -222,35 +228,12 @@ pub fn speech(ui: &mut Ui<Message>, page: &Page) -> Result<Vec<NodeId>, RenderEr
             .detail("候选出现英文词或查看释义时，可在手机端实时发音")
             .control(switch)
             .build(ui, theme)?,
-        SettingRow::new("播放音色")
-            .detail("选择手机端文本朗读时使用的语音模型")
-            .control(voices)
-            .build(ui, theme)?,
         SettingRow::new("音色试听")
-            .detail("向已连接的手机发送一段示例语音测试扬声效果")
+            .detail("向已连接的手机发送示例语音；发声音色与语速请在手机端「朗读设置」中调整")
             .control(preview)
             .build(ui, theme)?,
     ];
     out.push(group(ui, theme, &speech_rows)?);
-
-    // 3. 音色管理
-    out.push(section_title(ui, theme, "音色管理")?);
-
-    let import_btn = Button::new("选择文件夹…")
-        .disabled(!available || !state.running)
-        .build(ui, theme, "speech-import", Message::Speech("import", None))?;
-
-    let mut import_row = SettingRow::new("传输本地模型")
-        .detail("手机端已内置基础音色，亦可将解压后的语音模型文件夹同步到手机")
-        .info("选定包含模型文件的文件夹后，将自动打包并通过本地网络传输到手机端保存。")
-        .control(import_btn);
-
-    if !job.notice.is_empty() {
-        import_row = import_row.below(paragraph(ui, theme, &job.notice, None)?);
-    }
-
-    let import_node = import_row.build(ui, theme)?;
-    out.push(group(ui, theme, &[import_node])?);
 
     Ok(out)
 }

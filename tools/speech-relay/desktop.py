@@ -1,10 +1,12 @@
 """原生设置页的后台命令：只连接固定回环地址，以 TOML 返回界面状态。"""
 
 import argparse
+import base64
 import hashlib
 import json
 import os
 from pathlib import Path
+import re
 import shutil
 import struct
 import subprocess
@@ -14,13 +16,12 @@ import urllib.error
 import urllib.request
 import zlib
 
-from voice_packs import VoicePacks
-
 ROOT = Path(os.environ.get("APPDATA", str(Path.home()))) / "Qingjian/speech"
+REG_RUN_KEY = r"Software\Microsoft\Windows\CurrentVersion\Run"
+REG_RUN_NAME = "QingjianSpeechRelay"
 
 
 def settings():
-    import re
     text = (ROOT / "connection.toml").read_text(encoding="utf-8")
     port = int(re.search(r"port\s*=\s*(\d+)", text)[1])
     token = re.search(r'token\s*=\s*"([a-f0-9]{32})"', text)[1]
@@ -72,14 +73,79 @@ def qr_image(url):
     return str(path)
 
 
+def read_named_config():
+    """读取命名隧道配置，返回 (host, token)；不存在或不合法返回 None。"""
+    path = ROOT / "named-tunnel.toml"
+    if not path.is_file():
+        return None
+    try:
+        text = path.read_text(encoding="utf-8")
+        host_match = re.search(r'host\s*=\s*"([^"]+)"', text)
+        token_match = re.search(r'token\s*=\s*"([^"]+)"', text)
+        if not host_match or not token_match:
+            return None
+        host = host_match[1].strip()
+        token = token_match[1].strip()
+        if not host or not token:
+            return None
+        return {"host": host, "token": token}
+    except OSError:
+        return None
+
+
+def is_autostart_enabled():
+    if os.name != "nt":
+        return False
+    import winreg
+    try:
+        with winreg.OpenKey(winreg.HKEY_CURRENT_USER, REG_RUN_KEY, 0, winreg.KEY_READ) as key:
+            winreg.QueryValueEx(key, REG_RUN_NAME)
+            return True
+    except OSError:
+        return False
+
+
+def set_autostart(enable: bool):
+    if os.name != "nt":
+        return
+    import winreg
+    if enable:
+        exe = sys.executable
+        pythonw = Path(exe).with_name("pythonw.exe")
+        runner = str(pythonw) if pythonw.is_file() else exe
+        here = Path(__file__).resolve()
+        cmd = f'"{runner}" -B "{here}" autostart'
+        with winreg.CreateKey(winreg.HKEY_CURRENT_USER, REG_RUN_KEY) as key:
+            winreg.SetValueEx(key, REG_RUN_NAME, 0, winreg.REG_SZ, cmd)
+    else:
+        try:
+            with winreg.OpenKey(winreg.HKEY_CURRENT_USER, REG_RUN_KEY, 0, winreg.KEY_SET_VALUE) as key:
+                winreg.DeleteValue(key, REG_RUN_NAME)
+        except OSError:
+            pass
+
+
 def snapshot():
     try:
         data = request("/api/admin")
     except (OSError, ValueError, TypeError):
-        return {"running": False, "status": "未启动手机朗读连接", "choices": []}
+        return {
+            "running": False,
+            "status": "未启动手机朗读连接",
+            "autostart": is_autostart_enabled(),
+            "has_named_config": read_named_config() is not None,
+        }
     control = data["control"]
-    return {"running": True, "enabled": control["enabled"], "phone_connected": data["phone_connected"], "status": data["phone_status"],
-            "pair_url": data["pair_url"], "qr_path": qr_image(data["pair_url"]), "selected": f"{control['pack']}:{control['speaker']}", "choices": data["choices"]}
+    return {
+        "running": True,
+        "enabled": control["enabled"],
+        "phone_connected": data["phone_connected"],
+        "status": data["phone_status"],
+        "pair_url": data["pair_url"],
+        "qr_path": qr_image(data["pair_url"]),
+        "autostart": is_autostart_enabled(),
+        "has_named_config": read_named_config() is not None,
+    }
 
 
 def start():
@@ -94,12 +160,28 @@ def start():
     if not cloudflared:
         raise ValueError("未找到手机连接所需的 cloudflared 工具")
     ROOT.mkdir(parents=True, exist_ok=True)
+
+    named = read_named_config()
+    cmd = [sys.executable, "-B", str(here.with_name("server.py"))]
+    if named:
+        cmd.extend(["--named", "--named-host", named["host"], "--named-token", named["token"]])
+    else:
+        cmd.append("--internet")
+    cmd.extend(["--cloudflared", cloudflared])
+
     with (ROOT / "startup-error.log").open("wb") as errors:
-        process = subprocess.Popen([sys.executable, "-B", str(here.with_name("server.py")), "--internet", "--cloudflared", cloudflared],
+        process = subprocess.Popen(cmd,
                                    stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=errors,
                                    creationflags=subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0)
     for _ in range(80):
         if process.poll() is not None:
+            err_log = ""
+            try:
+                err_log = (ROOT / "startup-error.log").read_text(encoding="utf-8", errors="replace").strip()
+            except OSError:
+                pass
+            if err_log:
+                raise RuntimeError(err_log.splitlines()[-1])
             raise RuntimeError("连接工具启动失败，请检查网络或是否已有旧版连接工具运行")
         try:
             if request("/api/admin").get("pair_url", "").startswith("https://"):
@@ -126,21 +208,27 @@ def start_notes():
 
 def output(data):
     for key, value in data.items():
-        if key != "choices":
-            print(key + " = " + json.dumps(value, ensure_ascii=False))
-    for choice in data.get("choices", []):
-        print("[[choices]]")
-        print("key = " + json.dumps(choice["key"], ensure_ascii=False))
-        print("label = " + json.dumps(choice["label"], ensure_ascii=False))
+        print(key + " = " + json.dumps(value, ensure_ascii=False))
 
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("action", choices=("status", "start", "start-notes", "stop", "enable", "pause", "select", "preview", "import", "notes-enable", "notes-disable"))
+    parser.add_argument("action", choices=(
+        "status", "start", "start-notes", "stop", "enable", "pause", "preview",
+        "notes-enable", "notes-disable", "autostart", "autostart-enable", "autostart-disable"
+    ))
     parser.add_argument("value", nargs="?")
     args = parser.parse_args()
     try:
-        if args.action == "start":
+        if args.action == "autostart":
+            if read_named_config() is not None:
+                start()
+            return 0
+        elif args.action == "autostart-enable":
+            set_autostart(True)
+        elif args.action == "autostart-disable":
+            set_autostart(False)
+        elif args.action == "start":
             start()
         elif args.action == "start-notes":
             start_notes()
@@ -153,17 +241,11 @@ def main():
             request("/api/admin/control", {"allow_notes": args.action == "notes-enable"})
             if args.action == "notes-enable" and not request("/api/admin")["control"].get("allow_notes", False):
                 raise RuntimeError("旧连接工具不支持笔记，请使用 start-notes 启动新版")
-        elif args.action == "select":
-            pack, _, speaker = (args.value or "").rpartition(":")
-            request("/api/admin/control", {"pack": pack, "speaker": int(speaker)})
         elif args.action == "preview":
             request("/api/speech", "Hello. English speech is ready.", text=True)
-        elif args.action == "import":
-            info = VoicePacks(ROOT / "packs").add(args.value or "")
-            request("/api/admin/control", {"pack": info["id"], "speaker": 0})
         output(snapshot())
     except (OSError, ValueError, RuntimeError, subprocess.SubprocessError) as error:
-        output({"running": False, "status": str(error), "choices": []})
+        output({"running": False, "status": str(error), "autostart": is_autostart_enabled(), "has_named_config": read_named_config() is not None})
         return 1
     return 0
 

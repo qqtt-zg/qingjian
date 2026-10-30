@@ -16,10 +16,9 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import parse_qs, urlsplit
 import webbrowser
 
-from tunnel import QuickTunnel
+from tunnel import QuickTunnel, NamedTunnel
 from pairing import PairingStore
 from tailscale_link import TailscaleLink
-from voice_packs import VoicePacks
 from speech_control import SpeechControl
 from app_updates import AppUpdates
 from update_http import send_package
@@ -208,34 +207,6 @@ class SpeechHandler(BaseHTTPRequestHandler):
             except (OSError, ValueError, TypeError, AttributeError):
                 if request.path == "/api/update":
                     self.reply(503, {"error": "更新包暂不可用"})
-            return
-        if request.path.startswith("/api/packs/"):
-            if not self.authenticated():
-                return
-            try:
-                pack_id = request.path.removeprefix("/api/packs/")
-                metadata_only = pack_id.endswith("/meta")
-                if metadata_only:
-                    pack_id = pack_id.removesuffix("/meta")
-                info = self.server.state.control.packs.info(pack_id)
-                path = self.server.state.control.packs.root / (pack_id + ".zip")
-            except (OSError, ValueError, AttributeError):
-                self.reply(404, {"error": "音色包不可用"})
-                return
-            if metadata_only:
-                self.reply(200, info)
-                return
-            try:
-                self.send_response(200)
-                self.send_header("Content-Type", "application/zip")
-                self.send_header("Content-Length", str(info["size"]))
-                self.send_header("Cache-Control", "no-store")
-                self.end_headers()
-                with path.open("rb") as stream:
-                    while chunk := stream.read(65536):
-                        self.wfile.write(chunk)
-            except OSError:
-                pass
             return
         if request.path not in ("/api/status", "/api/events"):
             self.reply(404, {"error": "未找到页面。"})
@@ -458,46 +429,59 @@ def main():
     modes = parser.add_mutually_exclusive_group()
     modes.add_argument("--internet", action="store_true", help="创建临时 HTTPS 手机连接地址")
     modes.add_argument("--tailscale", action="store_true", help="使用 Tailscale 固定 HTTPS 地址和持久配对")
+    modes.add_argument("--named", action="store_true", help="使用 Cloudflare 命名隧道固定 HTTPS 地址和持久配对")
+    parser.add_argument("--named-host", default="", help="命名隧道绑定的固定域名")
+    parser.add_argument("--named-token", default="", help="Cloudflare 隧道运行令牌")
     parser.add_argument("--tailscale-exe", default="tailscale")
     parser.add_argument("--tailscale-port", type=int, default=8443)
-    parser.add_argument("--reset-pairing", action="store_true", help="主动撤销已有 Tailscale 配对，生成新凭证")
+    parser.add_argument("--reset-pairing", action="store_true", help="主动撤销已有持久配对，生成新凭证")
     parser.add_argument("--cloudflared", default="cloudflared", help="官方 cloudflared 可执行文件路径")
     args = parser.parse_args()
     if not 1 <= args.port <= 65535:
         parser.error("端口须在 1–65535 之间")
     if not 1 <= args.tailscale_port <= 65535 or (args.tailscale and args.tailscale_port == args.port):
         parser.error("Tailscale HTTPS 端口须有效且不同于本机 HTTP 端口")
-    if args.reset_pairing and not args.tailscale:
-        parser.error("--reset-pairing 仅用于 --tailscale 模式")
-    state = SpeechState(secrets.token_hex(16), [] if args.internet or args.tailscale else local_addresses())
+    if args.reset_pairing and not (args.tailscale or args.named):
+        parser.error("--reset-pairing 仅用于 --tailscale 或 --named 模式")
+    if args.named and (not args.named_host or not args.named_token):
+        parser.error("--named 模式需要提供 --named-host 与 --named-token")
+    state = SpeechState(secrets.token_hex(16), [] if args.internet or args.tailscale or args.named else local_addresses())
     # 公网模式只监听本机，由隧道转发手机请求，不开放局域网入站端口。
-    bind = "127.0.0.1" if args.internet or args.tailscale else args.bind
+    bind = "127.0.0.1" if args.internet or args.tailscale or args.named else args.bind
     try:
         server = SpeechServer((bind, args.port), state)
     except OSError:
         parser.exit(1, "无法启动：端口可能已占用，请关闭旧的连接工具后重试。\n")
     root = Path(os.environ.get("APPDATA", str(Path.home()))) / "Qingjian" / "speech"
     state_file = args.state_file or root / "connection.toml"
-    state.control = SpeechControl(state_file.parent, VoicePacks(state_file.parent / "packs"))
+    state.control = SpeechControl(state_file.parent)
     state.updates = AppUpdates(state_file.parent / "updates")
     state.learning = LearningSync(state_file.parent / "learning-backups", root.parent / "user-vocab.tsv")
     state.notes = NoteJobs(generate)
     connection_settings = f'port = {args.port}\ntoken = "{state.publish_token}"\n'
-    tunnel = QuickTunnel(args.cloudflared, args.port) if args.internet else None
+    tunnel = None
+    if args.internet:
+        tunnel = QuickTunnel(args.cloudflared, args.port)
+    elif args.named:
+        tunnel = NamedTunnel(args.cloudflared, args.named_host, args.named_token)
     server_thread = threading.Thread(target=server.serve_forever, daemon=True)
     server_thread.start()
     exit_code = 0
     try:
-        if args.tailscale:
-            link = TailscaleLink(args.tailscale_exe, args.port, args.tailscale_port)
-            state.public_url = link.start()
+        if args.tailscale or args.named:
             state.pairing = PairingStore(state_file.with_name("pairing.json"), args.reset_pairing)
             state.token = state.pairing.data["receive_token"]
             state.publish_token = state.pairing.data["publish_token"]
             state.sequence = state.pairing.data["sequence"]
             connection_settings = f'port = {args.port}\ntoken = "{state.publish_token}"\n'
+        if args.tailscale:
+            link = TailscaleLink(args.tailscale_exe, args.port, args.tailscale_port)
+            state.public_url = link.start()
         if tunnel:
-            print("正在建立临时公网连接…", flush=True)
+            if args.named:
+                print("正在建立固定公网命名隧道连接…", flush=True)
+            else:
+                print("正在建立临时公网连接…", flush=True)
             state.public_url = tunnel.start()
         state_file.parent.mkdir(parents=True, exist_ok=True)
         temporary = state_file.with_suffix(".tmp")
@@ -510,6 +494,8 @@ def main():
             print(f"{state.public_url}/#{state.token}", flush=True)
             if args.tailscale:
                 print("电脑、手机须连接同一 Tailscale 网络；此地址重启后保留，主动重置配对除外。", flush=True)
+            elif args.named:
+                print("命名隧道固定公网地址；此地址重启后保留，主动重置配对除外。", flush=True)
         else:
             print("在电脑浏览器打开配对页，再将其中的地址发送到手机：", flush=True)
             print(desktop_url, flush=True)

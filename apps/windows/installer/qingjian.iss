@@ -83,7 +83,6 @@ Source: "{#Repo}\tools\speech-relay\server.py"; DestDir: "{app}\tools\speech-rel
 Source: "{#Repo}\tools\speech-relay\learning_sync.py"; DestDir: "{app}\tools\speech-relay"; Flags: ignoreversion
 Source: "{#Repo}\tools\speech-relay\desktop.py"; DestDir: "{app}\tools\speech-relay"; Flags: ignoreversion
 Source: "{#Repo}\tools\speech-relay\speech_control.py"; DestDir: "{app}\tools\speech-relay"; Flags: ignoreversion
-Source: "{#Repo}\tools\speech-relay\voice_packs.py"; DestDir: "{app}\tools\speech-relay"; Flags: ignoreversion
 Source: "{#Repo}\tools\speech-relay\app_updates.py"; DestDir: "{app}\tools\speech-relay"; Flags: ignoreversion
 Source: "{#Repo}\tools\speech-relay\update_http.py"; DestDir: "{app}\tools\speech-relay"; Flags: ignoreversion
 Source: "{#Repo}\tools\speech-relay\notes\*.py"; DestDir: "{app}\tools\speech-relay\notes"; Flags: ignoreversion

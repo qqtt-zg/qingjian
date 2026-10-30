@@ -12,7 +12,6 @@ from notes.jobs import NoteJobs
 from notes.provider import parse_meaning, load_config
 from server import SpeechServer, SpeechState
 from speech_control import SpeechControl
-from voice_packs import VoicePacks
 
 
 class NoteTests(unittest.TestCase):
@@ -22,7 +21,7 @@ class NoteTests(unittest.TestCase):
         self.calls = []
         self.gate = threading.Event()
         self.state = SpeechState("a" * 32, [])
-        self.state.control = SpeechControl(self.root, VoicePacks(self.root / "packs"))
+        self.state.control = SpeechControl(self.root)
         def generate(english):
             self.calls.append(english)
             self.gate.wait(3)
