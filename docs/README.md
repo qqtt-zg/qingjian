@@ -28,6 +28,7 @@ README.md 只介绍项目（各语言译本在 [i18n/](i18n/)），所有技术�
 | [plan/learning-loop.md](plan/learning-loop.md) | 学习闭环（2026-10-20）：电脑端工作语境接入、手机端 `learner_model`、Agent 的读/分析/决断三层拆分、工作常用词判定与分阶段实施。分文件：[协议](plan/learning-loop/protocol.md)、[事件契约](plan/learning-loop/events.md)、[执行与排程](plan/learning-loop/execution.md)、[阶段与边界](plan/learning-loop/phases.md) |
 | [plan/learning-loop-review.md](plan/learning-loop-review.md) | 学习闭环计划完成度审核（2026-10-22）：阶段 0A 逐条核对、勾选可信度、已发现缺陷与可复核数字 |
 | [plan/wubi.md](plan/wubi.md) | 五笔（形码）支持方案（2026-09-15）：为什么不能按双拼的方式接、两条平行管线、码表与词频、`[general] scheme` 收敛、分期 |
+| [plan/persistent-speech-connection.md](plan/persistent-speech-connection.md) | 手机朗读连接的持久化与多电脑（2026-10-30）：三条根因（凭证随机、App 只认 HTTPS、地址变化感知不到）、Cloudflare 命名隧道（用隧道令牌，配置收进设置页）+ `PairingStore` + 开机恢复 + App 多配对与故障转移四层、音色归属改为纯手机为准并整层删除 `pack` 概念（第五层，修掉重连冲掉用户音色的缺陷）、改动点清单与分期；明确不做局域网自签证书 / mDNS / 同时监听两台 / 电脑推送音色包 / Cloudflare 账号 OAuth |
 | [notes/crate-notes.md](notes/crate-notes.md) | 各 crate / app / tool 的实现要点：入口类型、数据文件、常数、生成命令 |
 | [notes/linux-fcitx5.md](notes/linux-fcitx5.md) | Linux 默认面板构建、协议、安装与排错 |
 | [notes/linux-packaging.md](notes/linux-packaging.md) | Linux 发行包（2026-09-23）：`build.sh` 在容器里打 deb / rpm，各包装了什么、能装哪些发行版、装法与限制，`smoke/run.sh` 在五个发行版的干净容器里装包自检 |
