@@ -52,7 +52,7 @@ Android 同一时刻只允许一个 `VpnService` 活动。用户手机偶尔要�
 
 1. Cloudflare 后台 → Zero Trust → Networks → Tunnels → Create a tunnel → 选 Cloudflared → 起名（如 `qingjian-home`）。
 2. 创建后页面给出的安装命令里，`--token eyJhIjoi...` 后面那一整串就是令牌，复制它。
-3. 同一页 Public Hostname → Add：Subdomain 填 `speech`，Domain 选 `qingjian.app`，Service 填 `http://localhost:21835`。
+3. 同一页 Public Hostname → Add：Subdomain 填 `speech`，Domain 选 `qingjian.app`，Service 填 `http://127.0.0.1:21835`（**注意务必填 127.0.0.1 不要填 localhost**，避免 Windows 优先将 localhost 解析为 IPv6 `::1` 导致 502 Bad Gateway）。
 4. 把令牌粘进设置页。
 
 **第 3 步漏了的症状是「隧道连上了但访问返回 502」**，不是「连不上」，所以设置页的引导文案必须把这一步写清楚，否则用户会去查网络。
@@ -318,7 +318,7 @@ val labels = arrayOf("男声 1", "女声 1 · af_heart", "男声 2", "女声 2",
 - **旧 `control.json` 兼容**：电脑上残留带 `pack`/`speaker` 的旧 `control.json` 时，中继能正常启动（`SpeechControl.__init__` 的 `change(data, initial=True)` 要静默忽略这两个字段，不能抛 `ValueError`，否则中继起不来）。
 - **令牌校验三种输入都对**：粘 `eyJhIjoi...` 正常令牌 → 绿字显示隧道 ID 并自动连接；粘半截 → 红字「令牌解出来缺隧道 ID，可能复制不全」，不写文件；粘一段随便的文字 → 红字「这不像隧道令牌：应以 `eyJ` 开头」。三种情况都不需要等中继启动失败才反馈。
 - **两种运行期失败提示能分开**：令牌被后台轮换/隧道被删 → 提示「后台把这条隧道删了或换了令牌，请重新复制」；网络不通 → 提示「连不上 Cloudflare」。实测这两种在 `cloudflared` 输出里分别对应 `Failed to get tunnel` 与连接超时类日志，不能都显示成「建立手机连接超时」。
-- **Public Hostname 没配的表现要能被识别**：隧道连上但访问返回 502 时，设置页提示里要带上「检查后台的 Public Hostname 是否指向 `http://localhost:21835`」。
+- **Public Hostname 没配的表现要能被识别**：隧道连上但访问返回 502 时，设置页提示里要带上「检查后台的 Public Hostname 是否指向 `http://127.0.0.1:21835`（注意不要写成 localhost）」。
 - 开机自启开关能正确读写注册表 `Run`，开机启动后服务静默跑在后台，无控制台黑框弹出。
 - `python -B -m unittest discover -s tools/speech-relay -p 'test_*.py' -v` 全绿（删掉 `test_voice_packs.py` 整文件与 `test_control.py` 里那个音色包下载用例后）。
 - `cargo clippy --all-targets -- -D warnings` 全绿（设置页改动）。
@@ -385,7 +385,7 @@ val labels = arrayOf("男声 1", "女声 1 · af_heart", "男声 2", "女声 2",
 1. 打开 https://dash.cloudflare.com/?to=/:account/zero-trust/networks/tunnels（设置页那个「打开 Cloudflare 后台」按钮就是它）。
 2. Create a tunnel → 选 **Cloudflared** → 起名（建议 `qingjian-home`，第二台用 `qingjian-work`）。
 3. 创建完成后页面给出安装命令，复制其中 `--token` 后面那一整串（`eyJhIjoi...`，约两百字符）——这就是隧道令牌。
-4. 同一页 **Public Hostname → Add**：Subdomain 填 `speech`，Domain 选 `qingjian.app`，Service 填 `http://localhost:21835`。**这一步漏了的表现是「隧道连上了但访问 502」**。
+4. 同一页 **Public Hostname → Add**：Subdomain 填 `speech`，Domain 选 `qingjian.app`，Service 填 `http://127.0.0.1:21835`（注意务必填 127.0.0.1 而非 localhost）。**这一步漏了的表现是「隧道连上了但访问 502」**。
 5. 把令牌粘进设置页「隧道令牌」输入框，点保存。
 
 全程不碰命令行、不需要 `cloudflared tunnel login`、不需要拷任何文件。
