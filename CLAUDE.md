@@ -63,6 +63,6 @@ Windows 本机只 `cargo check --target x86_64-pc-windows-gnu`，真编译与真
 
 @docs/contributing.md
 
-- **构建与测试产物及时清理**：测试通过后即可清理测试产物，任务收尾后立即清理增量缓存（`target/debug/incremental`）、旧安装包（`dist/`）与临时构建目录，避免无谓膨胀。
+- **构建与测试产物及时清理**：测试通过后立即清理测试截图（`target/snapshots`）与临时文件；任务收尾后彻底清空 `target/debug` 目录（重点清除动辄数十 GB 的 `.pdb` 与 `.rlib` 产物）、`target/installer` 临时构建目录，并删除 `dist/` 下除最新构建之外的所有历史安装包，避免无谓膨胀。
 
 交流用中文。
