@@ -89,7 +89,7 @@ pub fn speech(ui: &mut Ui<Message>, page: &Page) -> Result<Vec<NodeId>, RenderEr
 
     // 连接方式切换选择器
     let mode_segmented = Segmented::new(
-        &["固定地址（推荐）", "临时地址"],
+        &["固定地址", "临时地址"],
         if mode == SpeechMode::Fixed { 0 } else { 1 },
     )
     .disabled(!available)
@@ -103,10 +103,11 @@ pub fn speech(ui: &mut Ui<Message>, page: &Page) -> Result<Vec<NodeId>, RenderEr
 
     let mode_row = SettingRow::new("连接方式")
         .detail(if mode == SpeechMode::Fixed {
-            "使用 Cloudflare 命名隧道，扫一次码长期有效，换网络、关机重启均不失效"
+            "命名隧道固定域名，推荐长期使用"
         } else {
-            "使用临时公网隧道（trycloudflare.com），适合快速体验，重启中继后地址失效"
+            "临时隧道，重启中继后地址失效"
         })
+        .info("固定地址通过 Cloudflare 命名隧道绑定个人域名，扫一次码长期有效，重启或换网络无需重扫，且支持两台电脑轮换；临时地址即开即用。")
         .control(mode_segmented)
         .build(ui, theme)?;
 
