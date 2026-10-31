@@ -126,6 +126,7 @@ def set_autostart(enable: bool):
 
 
 def snapshot():
+    named = read_named_config()
     try:
         data = request("/api/admin")
     except (OSError, ValueError, TypeError):
@@ -133,7 +134,8 @@ def snapshot():
             "running": False,
             "status": "未启动手机朗读连接",
             "autostart": is_autostart_enabled(),
-            "has_named_config": read_named_config() is not None,
+            "has_named_config": named is not None,
+            "named_host": named["host"] if named else "",
         }
     control = data["control"]
     return {
@@ -144,7 +146,8 @@ def snapshot():
         "pair_url": data["pair_url"],
         "qr_path": qr_image(data["pair_url"]),
         "autostart": is_autostart_enabled(),
-        "has_named_config": read_named_config() is not None,
+        "has_named_config": named is not None,
+        "named_host": named["host"] if named else "",
     }
 
 
@@ -211,16 +214,73 @@ def output(data):
         print(key + " = " + json.dumps(value, ensure_ascii=False))
 
 
+def save_named_config(data_str):
+    """保存命名隧道配置，格式为 JSON 字符串或包含 host 和 token 的文件路径。"""
+    if not data_str:
+        raise ValueError("缺少配置数据")
+    raw = data_str.strip()
+    if os.path.isfile(raw):
+        raw = Path(raw).read_text(encoding="utf-8")
+    parsed = json.loads(raw)
+    host = parsed.get("host", "").strip()
+    token = parsed.get("token", "").strip()
+    if not host:
+        raise ValueError("服务地址不能为空")
+    if not token or not token.startswith("eyJ"):
+        raise ValueError("隧道令牌格式无效，应以 eyJ 开头")
+    try:
+        decoded = json.loads(base64.b64decode(token + "==").decode("utf-8"))
+        if not all(k in decoded for k in ("a", "t", "s")):
+            raise ValueError("令牌解出来缺少必要字段")
+    except Exception as e:
+        raise ValueError(f"隧道令牌解析失败：{e}")
+    ROOT.mkdir(parents=True, exist_ok=True)
+    cfg_file = ROOT / "named-tunnel.toml"
+    content = f'host = "{host}"\ntoken = "{token}"\n'
+    temporary = cfg_file.with_suffix(".tmp")
+    temporary.write_text(content, encoding="utf-8")
+    temporary.replace(cfg_file)
+    # 如果服务当前在运行，重启以应用固定隧道
+    was_running = snapshot()["running"]
+    if was_running:
+        try:
+            request("/api/admin/stop", {})
+            time.sleep(1)
+        except Exception:
+            pass
+        start()
+
+
+def clear_named_config():
+    """清除命名隧道配置，恢复临时模式。"""
+    cfg_file = ROOT / "named-tunnel.toml"
+    if cfg_file.is_file():
+        cfg_file.unlink(missing_ok=True)
+    was_running = snapshot()["running"]
+    if was_running:
+        try:
+            request("/api/admin/stop", {})
+            time.sleep(1)
+        except Exception:
+            pass
+        start()
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("action", choices=(
         "status", "start", "start-notes", "stop", "enable", "pause", "preview",
-        "notes-enable", "notes-disable", "autostart", "autostart-enable", "autostart-disable"
+        "notes-enable", "notes-disable", "autostart", "autostart-enable", "autostart-disable",
+        "named-save", "named-clear"
     ))
     parser.add_argument("value", nargs="?")
     args = parser.parse_args()
     try:
-        if args.action == "autostart":
+        if args.action == "named-save":
+            save_named_config(args.value)
+        elif args.action == "named-clear":
+            clear_named_config()
+        elif args.action == "autostart":
             if read_named_config() is not None:
                 start()
             return 0

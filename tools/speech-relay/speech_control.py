@@ -22,7 +22,11 @@ class SpeechControl:
 
     def snapshot(self):
         with self.lock:
-            return dict(self.value)
+            data = dict(self.value)
+            # 保留占位字段供旧版手机 App 兼容解析，防止未升级的手机 App 报空指针异常不断重试
+            data["pack"] = "builtin"
+            data["speaker"] = 0
+            return data
 
     def change(self, data, initial=False):
         if not isinstance(data, dict):

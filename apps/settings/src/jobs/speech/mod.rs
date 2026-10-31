@@ -17,6 +17,12 @@ use bamboo_slip::Waker;
 type Outcome = (bool, Result<Snapshot, String>);
 type Request = (&'static str, Option<String>, bool);
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SpeechMode {
+    Fixed,
+    Temporary,
+}
+
 pub struct SpeechJob {
     pub state: Snapshot,
 
@@ -27,6 +33,10 @@ pub struct SpeechJob {
     pub live: bool,
 
     pub qr: Option<Arc<Qr>>,
+
+    pub mode: Option<SpeechMode>,
+
+    pub guide_open: bool,
 
     requests: Option<mpsc::Sender<Request>>,
 
@@ -41,9 +51,48 @@ impl SpeechJob {
             busy: false,
             live,
             qr: None,
+            mode: None,
+            guide_open: false,
             requests: None,
             result: Arc::default(),
         }
+    }
+
+    pub fn mode(&self) -> SpeechMode {
+        if let Some(mode) = self.mode {
+            mode
+        } else if self.state.has_named_config {
+            SpeechMode::Fixed
+        } else {
+            SpeechMode::Temporary
+        }
+    }
+
+    pub fn validate_token(token: &str) -> Result<String, String> {
+        let trimmed = token.trim();
+        if trimmed.is_empty() {
+            return Err("令牌不能为空".to_owned());
+        }
+        if !trimmed.starts_with("eyJ") {
+            return Err("这不像隧道令牌：应以 eyJ 开头，约两百个字符".to_owned());
+        }
+        use base64::Engine;
+        let mut padded = trimmed.to_owned();
+        while !padded.len().is_multiple_of(4) {
+            padded.push('=');
+        }
+        let bytes = base64::engine::general_purpose::STANDARD
+            .decode(&padded)
+            .map_err(|e| format!("Base64 解码失败：{e}"))?;
+        let json: serde_json::Value = serde_json::from_slice(&bytes)
+            .map_err(|e| format!("令牌不是合法 JSON 结构：{e}"))?;
+        let t = json.get("t").and_then(|v| v.as_str()).unwrap_or("");
+        let a = json.get("a").and_then(|v| v.as_str()).unwrap_or("");
+        let s = json.get("s").and_then(|v| v.as_str()).unwrap_or("");
+        if t.is_empty() || a.is_empty() || s.is_empty() {
+            return Err("令牌解出来缺少必要字段（需含账号与隧道信息）".to_owned());
+        }
+        Ok(t.to_owned())
     }
 
     pub fn poll(&mut self, waker: Option<Waker>) {
@@ -80,18 +129,40 @@ impl SpeechJob {
         });
     }
 
-    pub fn run(&mut self, action: &'static str, mut value: Option<String>, waker: Option<Waker>) {
+    pub fn run(&mut self, action: &'static str, value: Option<String>, waker: Option<Waker>) {
+        match action {
+            "mode-fixed" => {
+                self.mode = Some(SpeechMode::Fixed);
+                if let Some(waker) = waker {
+                    waker.wake();
+                }
+                return;
+            }
+            "mode-temporary" => {
+                self.mode = Some(SpeechMode::Temporary);
+                if let Some(waker) = waker {
+                    waker.wake();
+                }
+                return;
+            }
+            "guide-open" => {
+                self.guide_open = true;
+                if let Some(waker) = waker {
+                    waker.wake();
+                }
+                return;
+            }
+            "guide-close" => {
+                self.guide_open = false;
+                if let Some(waker) = waker {
+                    waker.wake();
+                }
+                return;
+            }
+            _ => {}
+        }
         if !self.live || self.busy {
             return;
-        }
-        if action == "import" {
-            let Some(folder) = rfd::FileDialog::new()
-                .set_title("选择解压后的音色模型文件夹")
-                .pick_folder()
-            else {
-                return;
-            };
-            value = Some(folder.to_string_lossy().into_owned());
         }
         self.poll(waker);
         if self
@@ -101,7 +172,8 @@ impl SpeechJob {
         {
             self.busy = true;
             self.notice = match action {
-                "import" => "正在打包音色；完成后手机开始下载…",
+                "named-save" => "正在保存隧道并建立连接…",
+                "named-clear" => "正在清除固定隧道并恢复临时连接…",
                 "start" => "正在建立手机连接…",
                 _ => "正在处理…",
             }
@@ -150,12 +222,26 @@ fn call(action: &str, value: Option<String>) -> Result<Snapshot, String> {
         use std::os::windows::process::CommandExt;
         command.creation_flags(0x0800_0000);
     }
-    if let Some(value) = value {
-        command.arg(value);
+    let mut temp_file: Option<std::path::PathBuf> = None;
+    if let Some(data) = value {
+        if action == "named-save" {
+            // 敏感的 Token 不直接作为命令行参数传递，通过临时文件转交
+            let dir = std::env::temp_dir();
+            let file_path = dir.join(format!("qj-named-save-{}.tmp", std::process::id()));
+            std::fs::write(&file_path, &data).map_err(|e| format!("写入临时配置失败：{e}"))?;
+            command.arg(&file_path);
+            temp_file = Some(file_path);
+        } else {
+            command.arg(data);
+        }
     }
     let output = command
         .output()
-        .map_err(|e| format!("启动手机朗读工具失败：{e}"))?;
+        .map_err(|e| format!("启动手机朗读工具失败：{e}"));
+    if let Some(path) = temp_file {
+        let _ = std::fs::remove_file(path);
+    }
+    let output = output?;
     let text = String::from_utf8(output.stdout).map_err(|e| e.to_string())?;
     if text.is_empty() {
         return Err("手机朗读工具未返回结果，请检查 Python 环境".to_owned());

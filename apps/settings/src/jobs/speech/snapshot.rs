@@ -21,6 +21,8 @@ pub struct Snapshot {
     pub(crate) autostart: bool,
 
     pub(crate) has_named_config: bool,
+
+    pub(crate) named_host: String,
 }
 
 impl Snapshot {
@@ -61,6 +63,7 @@ impl Snapshot {
             selected: string("selected"),
             autostart: boolean("autostart"),
             has_named_config: boolean("has_named_config"),
+            named_host: string("named_host"),
         })
     }
 }

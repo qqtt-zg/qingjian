@@ -9,6 +9,9 @@ pub const WEBSITE_URL: &str = "https://qingjian.app";
 
 pub const REPOSITORY_URL: &str = "https://github.com/qingjian-team";
 
+pub const CLOUDFLARE_TUNNEL_URL: &str =
+    "https://dash.cloudflare.com/?to=/:account/zero-trust/networks/tunnels";
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Action {
     /// 用文本编辑器打开配置文件。
@@ -23,6 +26,8 @@ pub enum Action {
     OpenRepository,
     /// 官网的下载页。
     OpenDownload,
+    /// 打开 Cloudflare 隧道后台页面。
+    OpenTunnelDashboard,
 }
 
 impl Action {
@@ -34,6 +39,7 @@ impl Action {
             Self::OpenConfig | Self::OpenDataDir => "config",
             Self::OpenWebsite | Self::OpenRepository => "links",
             Self::OpenDownload => "update",
+            Self::OpenTunnelDashboard => "speech",
         }
     }
 
@@ -51,6 +57,7 @@ impl Action {
             Self::OpenWebsite => open(WEBSITE_URL).map(|()| String::new()),
             Self::OpenRepository => open(REPOSITORY_URL).map(|()| String::new()),
             Self::OpenDownload => open(qingjian_update::DOWNLOAD_URL).map(|()| String::new()),
+            Self::OpenTunnelDashboard => open(CLOUDFLARE_TUNNEL_URL).map(|()| String::new()),
         };
         match result {
             Ok(message) => (!message.is_empty()).then_some(message),

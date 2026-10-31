@@ -3994,6 +3994,7 @@ name = "qingjian-settings"
 version = "0.3.2-dev"
 dependencies = [
  "bamboo-slip",
+ "base64 0.23.1",
  "cosmic-text",
  "dotenvy",
  "flate2",

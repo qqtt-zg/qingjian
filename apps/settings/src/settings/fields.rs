@@ -20,6 +20,12 @@ impl Settings {
             FieldId::BaseUrl => predict.base_url.clone(),
             FieldId::Model => predict.model.clone(),
             FieldId::ApiKey => String::new(),
+            FieldId::TunnelHost => self
+                .speech
+                .state
+                .named_host
+                .clone(),
+            FieldId::TunnelToken => String::new(),
             FieldId::VocabularySearch => String::new(),
             FieldId::PhraseCode | FieldId::PhraseWeight | FieldId::PhraseText => return,
         };
@@ -44,6 +50,9 @@ impl Settings {
                 if !text.is_empty() && text != *current {
                     self.write("predict", id.key(), text);
                 }
+            }
+            FieldId::TunnelHost | FieldId::TunnelToken => {
+                // 隧道配置通过专门的保存按钮提交，回车不触发自动提交
             }
             FieldId::PhraseCode
             | FieldId::PhraseWeight

@@ -29,6 +29,7 @@ qingjian-translate.workspace = true
 # 导入时的文件选择窗口（与 Windows 旧设置程序同一个）
 rfd = "0.17"
 dotenvy.workspace = true
+base64.workspace = true
 # 实验功能：下载模型（清单、分块核对、解压）
 reqwest = { workspace = true, features = ["native-tls", "system-proxy"] }
 tokio = { workspace = true, features = ["macros"] }

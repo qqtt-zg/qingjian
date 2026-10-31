@@ -9,6 +9,10 @@ pub enum FieldId {
     PhraseCode,
     PhraseWeight,
     PhraseText,
+    /// 手机朗读固定隧道地址（域名）。
+    TunnelHost,
+    /// 手机朗读隧道令牌（Token）。
+    TunnelToken,
     /// 生词本页的搜索框，不存进配置。
     VocabularySearch,
 }
@@ -26,6 +30,8 @@ impl FieldId {
             Self::PhraseCode => "code",
             Self::PhraseWeight => "weight",
             Self::PhraseText => "text",
+            Self::TunnelHost => "tunnel_host",
+            Self::TunnelToken => "tunnel_token",
             Self::VocabularySearch => "vocabulary-search",
         }
     }
