@@ -292,7 +292,16 @@ impl App for Settings {
 
     fn wake(&mut self) -> bool {
         let mut changed = self.search.expire(Instant::now());
-        changed |= self.speech.finish();
+        let speech_changed = self.speech.finish();
+        if speech_changed {
+            if let Some(edit) = self.fields.get_mut(&FieldId::TunnelHost)
+                && edit.text().is_empty()
+                && !self.speech.state.named_host.is_empty()
+            {
+                *edit = bamboo_slip::TextEdit::new(self.speech.state.named_host.clone());
+            }
+        }
+        changed |= speech_changed;
         if let Some(text) = self.cloud_test.finish() {
             self.notice = Some(("cloud", text));
             changed = true;

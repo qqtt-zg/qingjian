@@ -151,6 +151,10 @@ impl<'a> TextField<'a> {
         let view = ui.scene().node(
             Style {
                 flex_grow: 1.0,
+                min_size: Size {
+                    width: LengthPercentageAuto::length(0.0),
+                    height: LengthPercentageAuto::auto(),
+                },
                 flex_direction: if multiline {
                     FlexDirection::Column
                 } else {
@@ -217,6 +221,14 @@ impl<'a> TextField<'a> {
             Style {
                 padding: padding(theme, vertical, if self.filled { 9.0 } else { 8.0 }),
                 size: size(self.width.map(|width| theme.px(width)), height),
+                max_size: Size {
+                    width: self
+                        .width
+                        .map_or(LengthPercentageAuto::auto(), |w| {
+                            LengthPercentageAuto::length(theme.px(w))
+                        }),
+                    height: LengthPercentageAuto::auto(),
+                },
                 min_size: Size {
                     width: LengthPercentageAuto::auto(),
                     height: LengthPercentageAuto::length(min_height),

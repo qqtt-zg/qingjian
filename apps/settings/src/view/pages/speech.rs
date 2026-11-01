@@ -152,8 +152,13 @@ pub fn speech(ui: &mut Ui<Message>, page: &Page) -> Result<Vec<NodeId>, RenderEr
         };
 
         let token_input = if let Some(edit) = page.settings.fields.get(&FieldId::TunnelToken) {
+            let placeholder = if state.has_named_config {
+                "已配置（输入新令牌可替换）"
+            } else {
+                "从 Cloudflare 复制的 eyJhIjoi... 令牌"
+            };
             TextField::new(edit)
-                .placeholder("从 Cloudflare 复制的 eyJhIjoi... 令牌")
+                .placeholder(placeholder)
                 .secret(true)
                 .width(FIELD_WIDTH)
                 .build(
@@ -226,7 +231,9 @@ pub fn speech(ui: &mut Ui<Message>, page: &Page) -> Result<Vec<NodeId>, RenderEr
             .trim_end_matches('/')
             .to_owned();
 
-        let can_save = available && !clean_host.is_empty() && !token_edit.is_empty();
+        let can_save = available
+            && !clean_host.is_empty()
+            && (!token_edit.is_empty() || state.has_named_config);
         let payload = serde_json::json!({
             "host": clean_host,
             "token": token_edit,

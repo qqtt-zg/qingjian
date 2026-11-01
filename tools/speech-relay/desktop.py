@@ -222,8 +222,9 @@ def save_named_config(data_str):
     if os.path.isfile(raw):
         raw = Path(raw).read_text(encoding="utf-8")
     parsed = json.loads(raw)
+    existing = read_named_config() or {}
     host = re.sub(r"^https?://", "", parsed.get("host", "").strip()).rstrip("/")
-    token = parsed.get("token", "").strip()
+    token = parsed.get("token", "").strip() or existing.get("token", "")
     if not host:
         raise ValueError("服务地址不能为空")
     if not token or not token.startswith("eyJ"):
