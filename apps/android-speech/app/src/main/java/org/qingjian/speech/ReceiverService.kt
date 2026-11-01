@@ -55,8 +55,6 @@ class ReceiverService : Service() {
 
     override fun onCreate() {
         super.onCreate()
-        System.setProperty("java.net.preferIPv4Stack", "true")
-        System.setProperty("java.net.preferIPv6Addresses", "false")
         BundledVoice.initializeSelection(this)
         getSystemService(NotificationManager::class.java).createNotificationChannel(NotificationChannel("speech", "朗读连接", NotificationManager.IMPORTANCE_LOW))
         player = SpeechPlayer(this, {
@@ -99,8 +97,7 @@ class ReceiverService : Service() {
     private fun receive(initialPair: Pairing, run: Long) {
         var pair = initialPair
         val prefs = getSharedPreferences("speech", 0)
-        val initialSavedSeq = prefs.getLong("sequence.${pair.host}", -1L)
-        var after: Long? = if (initialSavedSeq >= 0) initialSavedSeq else null
+        var after: Long? = null
         var delay = 1500L
         var reconnecting = false
 
@@ -265,7 +262,7 @@ class ReceiverService : Service() {
         connection = http
         try {
             http.instanceFollowRedirects = false
-            http.connectTimeout = 2500; http.readTimeout = 22000
+            http.connectTimeout = 5000; http.readTimeout = 22000
             http.setRequestProperty("Authorization", "Bearer ${pair.token}")
             if (http.responseCode == 401) throw SecurityException()
             check(http.responseCode == 200)
