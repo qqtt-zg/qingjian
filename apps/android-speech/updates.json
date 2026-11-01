@@ -1,0 +1,9 @@
+{
+  "package": "org.qingjian.speech",
+  "version_code": 40,
+  "version_name": "0.2.33-dev",
+  "size": 465638620,
+  "sha256": "46943313a26e7b582a6d9927527235eff9854ec35cfe7c35c13729a36dcaf4e7",
+  "download_url": "https://ghfast.top/https://github.com/qqtt-zg/qingjian/releases/download/v0.2.33-dev/qingjian-learning-0.2.33-dev-build40-arm64-v8a.apk",
+  "changelog": "1. 支持脱离电脑独立检查云端更新并直接弹出更新提醒\n2. 采用单长连接高速流式传输与 256KB 大缓冲\n3. 释放一加 Ace 5 (骁龙 8 Gen 3) 旗舰极速 6 大核性能调度与算子预热\n4. 支持 Cloudflare 命名隧道固定域名与开机自启"
+}

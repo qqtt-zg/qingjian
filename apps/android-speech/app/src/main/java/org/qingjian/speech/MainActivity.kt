@@ -85,7 +85,7 @@ open class MainActivity : ComponentActivity() {
             gainSummary?.text = "音量增强：${(prefs.getFloat("gain", 1f).coerceIn(0.5f, 4f) * 100).toInt()}%"
             rateSummary?.text = "朗读语速：${SpeechRate.label(SpeechRate.percent(this@MainActivity))}"
             rateControls?.refresh()
-            updateSummary?.text = getSharedPreferences("app_update", 0).getString("status", "连接电脑后可检查应用更新")
+            updateSummary?.text = getSharedPreferences("app_update", 0).getString("status", "连接电脑或公网可检查更新")
             refreshVoices()
             handler.postDelayed(this, 1000)
         }
@@ -286,6 +286,44 @@ open class MainActivity : ComponentActivity() {
         aiSummary?.text = if(runCatching { Credentials(this).load().validate() }.isSuccess) "已保存 API 配置" else "尚未配置 AI 接口"
         applyGain((getSharedPreferences("speech", 0).getFloat("gain", 1f).coerceIn(0.5f, 4f) * 100).toInt())
         handler.post(refresh)
+        promptUpdateIfAvailable()
+    }
+
+    private var updateDialogShown = false
+
+    private fun promptUpdateIfAvailable() {
+        if (isFinishing || isDestroyed || updateDialogShown) return
+        val prefs = getSharedPreferences("app_update", 0)
+        val data = org.qingjian.speech.update.UpdateClient.metadata(this) ?: run {
+            // 未检查过时，在后台静默发起一次云端检查
+            org.qingjian.speech.update.UpdateClient.check(this) { hasNew ->
+                if (hasNew) handler.post { promptUpdateIfAvailable() }
+            }
+            return
+        }
+        val currentCode = org.qingjian.speech.update.UpdateClient.code(org.qingjian.speech.update.UpdateClient.installed(this))
+        val targetCode = data.optLong("version_code", 0L)
+        if (targetCode <= currentCode) return
+
+        val dismissed = prefs.getLong("dismissed_version_code", 0L)
+        if (dismissed == targetCode && !org.qingjian.speech.update.UpdateClient.ready(this)) return
+
+        updateDialogShown = true
+        val ready = org.qingjian.speech.update.UpdateClient.ready(this)
+        val versionName = data.optString("version_name", "")
+        val changelog = data.optString("changelog", "有新的版本可用。")
+
+        android.app.AlertDialog.Builder(this)
+            .setTitle(if (ready) "安装新版本" else "发现新版本：$versionName")
+            .setMessage(if (ready) "新版本安装包已下载完成，是否立即安装？" else "$changelog\n\n是否立即更新？")
+            .setPositiveButton(if (ready) "立即安装" else "立即更新") { _, _ ->
+                startActivity(Intent(this, org.qingjian.speech.update.UpdateActivity::class.java))
+            }
+            .setNegativeButton("稍后") { _, _ ->
+                prefs.edit().putLong("dismissed_version_code", targetCode).apply()
+            }
+            .setCancelable(true)
+            .show()
     }
 
     private fun arrangePage(ui: Views) {

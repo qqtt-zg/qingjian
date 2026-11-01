@@ -6,8 +6,8 @@ android {
         applicationId 'org.qingjian.speech'
         minSdk 26
         targetSdk 35
-        versionCode 39
-        versionName '0.2.32-dev'
+        versionCode 40
+        versionName '0.2.33-dev'
         ndk { abiFilters(project.findProperty('speechAbi') ?: 'arm64-v8a') }
         testInstrumentationRunner 'org.qingjian.speech.SmokeInstrumentation'
     }

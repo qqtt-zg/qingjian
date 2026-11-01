@@ -27,6 +27,12 @@ object UpdateClient {
 
     private val paused = AtomicBoolean(false)
 
+    // 公网云端更新源（免连电脑，通过国内加速镜像直连，不走 VPN）
+    private val CLOUD_UPDATE_URLS = listOf(
+        "https://ghfast.top/https://raw.githubusercontent.com/qqtt-zg/qingjian/integrate/upstream-20261016-113659/apps/android-speech/updates.json",
+        "https://raw.gitmirror.com/qqtt-zg/qingjian/integrate/upstream-20261016-113659/apps/android-speech/updates.json"
+    )
+
     @Volatile private var activeConnection: HttpURLConnection? = null
 
     private fun prefs(context: Context) = context.getSharedPreferences("app_update", 0)
@@ -81,58 +87,92 @@ object UpdateClient {
 
     fun validateMetadata(context: Context, data: JSONObject) {
         require(data.getString("package") == context.packageName) { "安装包不属于当前应用" }
-        require(data.getLong("version_code") > code(installed(context))) { "电脑提供的版本不高于当前版本，请重新检查更新" }
+        require(data.getLong("version_code") > code(installed(context))) { "版本不高于当前版本" }
         require(data.getString("version_name").length in 1..100) { "版本名称无效" }
         require(data.getLong("size") in 1..1024L * 1024 * 1024) { "安装包大小无效" }
         require(data.getString("sha256").matches(Regex("[a-f0-9]{64}"))) { "安装包校验信息无效" }
     }
 
-    fun check(context: Context) = work(context) { app ->
-        status(app, "正在检查电脑提供的更新…")
-        val source = pair(app)
-        val http = open(source, "/api/update")
-        try {
-            if (http.responseCode == 404) {
-                status(app, "电脑连接工具暂不支持应用更新，请更新电脑端工具")
-                return@work
-            }
-            check(http.responseCode == 200)
-            val bytes = http.inputStream.use { input ->
-                val output = java.io.ByteArrayOutputStream()
-                val block = ByteArray(2048)
-                while (true) {
-                    val count = input.read(block)
-                    if (count < 0) break
-                    check(output.size() + count <= 16384)
-                    output.write(block, 0, count)
+    fun hasUpdate(context: Context): Boolean = runCatching {
+        val data = metadata(context) ?: return false
+        data.getLong("version_code") > code(installed(context))
+    }.getOrDefault(false)
+
+    fun check(context: Context, onResult: ((Boolean) -> Unit)? = null) = work(context) { app ->
+        status(app, "正在检查应用更新…")
+        var foundData: JSONObject? = null
+        var isFromCloud = false
+
+        // 1. 优先尝试从公网云端（GitHub 加速源）获取更新，彻底脱离电脑
+        for (cloudUrl in CLOUD_UPDATE_URLS) {
+            try {
+                val http = URL(cloudUrl).openConnection() as HttpURLConnection
+                http.instanceFollowRedirects = true
+                http.connectTimeout = 4000
+                http.readTimeout = 6000
+                if (http.responseCode == 200) {
+                    val raw = http.inputStream.use { it.readBytes() }
+                    val json = JSONObject(String(raw, Charsets.UTF_8))
+                    if (json.getString("package") == app.packageName && json.getLong("version_code") > code(installed(app))) {
+                        foundData = json
+                        isFromCloud = true
+                        break
+                    }
                 }
-                output.toByteArray()
+            } catch (_: Exception) {}
+        }
+
+        // 2. 如果云端没有更新或网络不可达，尝试向已配对的电脑中继查询（保底）
+        if (foundData == null) {
+            runCatching {
+                val source = pair(app)
+                val http = open(source, "/api/update")
+                try {
+                    if (http.responseCode == 200) {
+                        val bytes = http.inputStream.use { it.readBytes() }
+                        val updateObj = JSONObject(String(bytes, Charsets.UTF_8)).optJSONObject("update")
+                        if (updateObj != null && updateObj.getLong("version_code") > code(installed(app))) {
+                            foundData = updateObj
+                            isFromCloud = false
+                        }
+                    }
+                } finally { http.disconnect() }
             }
-            check(bytes.size <= 16384)
-            val data = JSONObject(String(bytes, Charsets.UTF_8)).optJSONObject("update")
-            if (data == null || data.getLong("version_code") <= code(installed(app))) {
-                prefs(app).edit().remove("metadata").remove("ready").apply()
-                status(app, if (data == null) "电脑尚未提供安装包" else "当前已是电脑提供的最新版本")
+        }
+
+        if (foundData == null) {
+            prefs(app).edit().remove("metadata").remove("ready").apply()
+            status(app, "当前已是最新版本")
+            onResult?.invoke(false)
+        } else {
+            validateMetadata(app, foundData)
+            val previous = metadata(app)
+            val editor = prefs(app).edit().putString("metadata", foundData.toString())
+            if (!isFromCloud) {
+                val source = pair(app)
+                editor.putString("source", source.base + "/#" + source.token)
             } else {
-                validateMetadata(app, data)
-                val previous = metadata(app)
-                val editor = prefs(app).edit().putString("metadata", data.toString())
-                    .putString("source", source.base + "/#" + source.token)
-                if (previous == null || previous.optString("sha256") != data.getString("sha256") ||
-                    previous.optLong("version_code") != data.getLong("version_code")) editor.remove("ready")
-                editor.apply()
-                status(app, "发现新版本 ${data.getString("version_name")}（构建 ${data.getLong("version_code")}）")
+                editor.remove("source")
             }
-        } finally { http.disconnect() }
+            if (previous == null || previous.optString("sha256") != foundData.getString("sha256") ||
+                previous.optLong("version_code") != foundData.getLong("version_code")) editor.remove("ready")
+            editor.apply()
+            status(app, "发现新版本 ${foundData.getString("version_name")}（构建 ${foundData.getLong("version_code")}）")
+            onResult?.invoke(true)
+        }
     }
 
     fun download(context: Context, restart: Boolean = false) = work(context) { app ->
         downloading.set(true); paused.set(false)
         val data = checkNotNull(metadata(app))
         validateMetadata(app, data)
-        val source = Pairing.parse(prefs(app).getString("source", "").orEmpty())
-        val known = org.qingjian.speech.learning.ConnectionControls.loadPairings(prefs(app))
-        require(source == pair(app) || known.any { it.host == source.host }) { "配对已变化，请重新检查更新" }
+        val cloudDownloadUrl = data.optString("download_url", "").trim()
+        val isCloudDownload = cloudDownloadUrl.startsWith("http://") || cloudDownloadUrl.startsWith("https://")
+        if (!isCloudDownload) {
+            val source = Pairing.parse(prefs(app).getString("source", "").orEmpty())
+            val known = org.qingjian.speech.learning.ConnectionControls.loadPairings(prefs(app))
+            require(source == pair(app) || known.any { it.host == source.host }) { "配对已变化，请重新检查更新" }
+        }
         val folder = File(app.cacheDir, "updates").apply { mkdirs() }
         val destination = archiveFile(app, data)
         val partial = File(folder, destination.name + ".part")
@@ -143,7 +183,20 @@ object UpdateClient {
         val started = System.nanoTime()
         val before = partial.length()
         PackageDownload({ start, end ->
-            open(source, "/api/update/" + data.getString("sha256")).apply {
+            val conn = if (isCloudDownload) {
+                // 公网云端下载：直接连接 GitHub 加速直链，不发本地鉴权凭证
+                val http = URL(cloudDownloadUrl).openConnection() as HttpURLConnection
+                http.instanceFollowRedirects = true
+                http.connectTimeout = 15000
+                http.readTimeout = 45000
+                http.setRequestProperty("Accept-Encoding", "identity")
+                http
+            } else {
+                // 电脑中继下载：走原有配对中继接口
+                val source = Pairing.parse(prefs(app).getString("source", "").orEmpty())
+                open(source, "/api/update/" + data.getString("sha256"))
+            }
+            conn.apply {
                 setRequestProperty("Range", "bytes=$start-$end")
                 setRequestProperty("If-Range", "\"${data.getString("sha256")}\"")
                 activeConnection = this
