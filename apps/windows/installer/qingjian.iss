@@ -163,6 +163,8 @@ Filename: "{sys}\taskkill.exe"; Parameters: "/im qingjian-settings.exe /f"; \
   Flags: runhidden; RunOnceId: "KillSettings"
 Filename: "{sys}\taskkill.exe"; Parameters: "/im qingjian-settings-legacy.exe /f"; \
   Flags: runhidden; RunOnceId: "KillLegacySettings"
+Filename: "{sys}\taskkill.exe"; Parameters: "/im cloudflared.exe /f"; \
+  Flags: runhidden; RunOnceId: "KillCloudflared"
 Filename: "{sys}\regsvr32.exe"; Parameters: "/u /s ""{app}\{#TsfDll}"""; \
   Flags: runhidden; RunOnceId: "UnregDll"
 Filename: "{syswow64}\regsvr32.exe"; Parameters: "/u /s ""{app}\{#TsfDll32}"""; \
@@ -249,6 +251,7 @@ begin
   KillProcess('qingjian-server.exe');
   KillProcess('qingjian-settings.exe');
   KillProcess('qingjian-settings-legacy.exe');
+  KillProcess('cloudflared.exe');
   RetireLoadedDll('{#TsfDll}');
   RetireLoadedDll('{#TsfDll32}');
   Result := '';
