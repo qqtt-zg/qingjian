@@ -32,6 +32,7 @@ class SpeechPlayer(
     private var engine: OfflineTts? = null
     private var bilingual: OfflineTts? = null
     private var enginePack=""
+    private var bilingualPack=""
     private val audio = context.getSystemService(AudioManager::class.java)
     private val attributes = AudioAttributes.Builder().setUsage(AudioAttributes.USAGE_MEDIA).setContentType(AudioAttributes.CONTENT_TYPE_SPEECH).build()
 
@@ -57,9 +58,13 @@ class SpeechPlayer(
             val voice = prefs.getInt("voice", 1)
             // 极速/狂暴模式下，在后台静默预热一次，消除首字冷启动的图分配与算子初始化开销
             if (SpeechPerformance.mode(context) == SpeechPerformance.MODE_EXTREME) {
+                val threads = SpeechPerformance.threads(context)
+                val biKey = "bilingual:$threads"
                 runCatching {
-                    if (voice == 1 && bilingual == null) {
+                    if (voice == 1 && (bilingual == null || bilingualPack != biKey)) {
+                        bilingual?.release()
                         bilingual = BundledVoice.create(context, 1)
+                        bilingualPack = biKey
                         bilingual?.generate("a", 3, 1.0f)
                     }
                 }
@@ -111,7 +116,14 @@ class SpeechPlayer(
                     val voice:Int
                     if(useBilingual) {
                         label=if(segment.chinese)ChineseVoices.label(context) else names[selected]
-                        if(bilingual==null){event(next.first,"正在准备中英文音色，首次加载请稍候…");bilingual=BundledVoice.create(context,1)}
+                        val biKey = "bilingual:$threads"
+                        if(bilingual==null || bilingualPack!=biKey){
+                            event(next.first,"正在准备中英文音色，首次加载请稍候…")
+                            bilingual?.release()
+                            bilingual=null
+                            bilingual=BundledVoice.create(context,1)
+                            bilingualPack=biKey
+                        }
                         selectedEngine=bilingual!!
                         voice=if(segment.chinese)ChineseVoices.speaker(context) else BundledVoice.speakerId(selected)
                         usingCustom=false
