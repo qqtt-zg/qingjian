@@ -14,7 +14,8 @@ class PackageDownload(
 
     private val cancelled: () -> Boolean = { false },
 
-    private val chunkSize: Long = 4L * 1024 * 1024,
+    // 默认单连接全速流式拉取整包，网络中断时依然支持断点续传，避免小切片频繁重新握手
+    private val chunkSize: Long = 1024L * 1024 * 1024,
 ) {
     fun transfer(partial: File, size: Long, sha: String, progress: (Long) -> Unit, notice: (String) -> Unit) {
         require(size in 1..1024L * 1024 * 1024 && sha.matches(Regex("[a-f0-9]{64}")) && chunkSize > 0)
@@ -50,8 +51,8 @@ class PackageDownload(
                 }
                 if(http.contentLengthLong != responseEnd - start + 1) throw UpdateFailure("安装包长度与更新信息不一致，请重新检查更新")
                 var received = start
-                http.inputStream.use { input -> FileOutputStream(partial, start > 0).use { output ->
-                    val block = ByteArray(65536)
+                http.inputStream.use { input -> java.io.BufferedOutputStream(FileOutputStream(partial, start > 0), 262144).use { output ->
+                    val block = ByteArray(262144)
                     while(received <= responseEnd) {
                         stopIfCancelled()
                         val count = input.read(block, 0, minOf(block.size.toLong(), responseEnd - received + 1).toInt())
@@ -61,6 +62,7 @@ class PackageDownload(
                         val now = System.nanoTime()
                         if(now - shown >= 250_000_000L) { progress(received); shown = now }
                     }
+                    output.flush()
                 } }
                 progress(received); failures = 0
             } catch(error: IOException) {

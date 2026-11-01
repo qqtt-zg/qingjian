@@ -61,7 +61,7 @@ def send_package(handler, updates, digest):
             stream.seek(start)
             remaining = end - start + 1
             while remaining:
-                block = stream.read(min(65536, remaining))
+                block = stream.read(min(262144, remaining))
                 if not block:
                     break
                 handler.wfile.write(block)
