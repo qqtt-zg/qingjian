@@ -19,7 +19,13 @@ pub enum FieldId {
 
 impl FieldId {
     /// 存进配置的那几个（短语的几个随卡片一起存）。
-    pub const ALL: [Self; 3] = [Self::BaseUrl, Self::Model, Self::ApiKey];
+    pub const ALL: [Self; 5] = [
+        Self::BaseUrl,
+        Self::Model,
+        Self::ApiKey,
+        Self::TunnelHost,
+        Self::TunnelToken,
+    ];
 
     /// 配置文件 `[predict]` 里的键。
     pub fn key(self) -> &'static str {
