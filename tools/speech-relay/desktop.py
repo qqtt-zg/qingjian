@@ -84,7 +84,7 @@ def read_named_config():
         token_match = re.search(r'token\s*=\s*"([^"]+)"', text)
         if not host_match or not token_match:
             return None
-        host = host_match[1].strip()
+        host = re.sub(r"^https?://", "", host_match[1].strip()).rstrip("/")
         token = token_match[1].strip()
         if not host or not token:
             return None
@@ -222,7 +222,7 @@ def save_named_config(data_str):
     if os.path.isfile(raw):
         raw = Path(raw).read_text(encoding="utf-8")
     parsed = json.loads(raw)
-    host = parsed.get("host", "").strip()
+    host = re.sub(r"^https?://", "", parsed.get("host", "").strip()).rstrip("/")
     token = parsed.get("token", "").strip()
     if not host:
         raise ValueError("服务地址不能为空")
@@ -240,7 +240,7 @@ def save_named_config(data_str):
     temporary = cfg_file.with_suffix(".tmp")
     temporary.write_text(content, encoding="utf-8")
     temporary.replace(cfg_file)
-    # 如果服务当前在运行，重启以应用固定隧道
+    # 保存后若中继在运行则重启应用，若未运行则直接启动服务
     was_running = snapshot()["running"]
     if was_running:
         try:
@@ -248,7 +248,7 @@ def save_named_config(data_str):
             time.sleep(1)
         except Exception:
             pass
-        start()
+    start()
 
 
 def clear_named_config():

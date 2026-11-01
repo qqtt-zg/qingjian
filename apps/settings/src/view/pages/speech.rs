@@ -15,7 +15,7 @@ use crate::system::action::Action;
 use crate::view::Page;
 
 /// 输入框宽度（点）。
-const FIELD_WIDTH: f32 = 280.0;
+const FIELD_WIDTH: f32 = 260.0;
 
 /// 引导弹窗宽度（点）。
 const GUIDE_DIALOG_WIDTH: f32 = 460.0;
@@ -182,7 +182,8 @@ pub fn speech(ui: &mut Ui<Message>, page: &Page) -> Result<Vec<NodeId>, RenderEr
         if !token_edit.is_empty() {
             match SpeechJob::validate_token(&token_edit) {
                 Ok(tunnel_id) => {
-                    let valid_text = format!("✓ 隧道 ID 校验有效：{tunnel_id}，保存后将自动应用");
+                    let short_id = &tunnel_id[..8.min(tunnel_id.len())];
+                    let valid_text = format!("✓ 令牌有效（ID: {short_id}…）");
                     let valid_node = ui.scene().node(
                         Style::default(),
                         Visual::Text {
@@ -211,16 +212,23 @@ pub fn speech(ui: &mut Ui<Message>, page: &Page) -> Result<Vec<NodeId>, RenderEr
         conn_rows.push(token_row.build(ui, theme)?);
 
         // 操作按钮行：指引、保存并应用、恢复临时
-        let guide_btn = Button::new("怎么拿这个？").build(
+        let guide_btn = Button::new("配置指引").build(
             ui,
             theme,
             "tunnel-guide",
             Message::Speech("guide-open", None),
         )?;
 
-        let can_save = available && !host_edit.is_empty() && !token_edit.is_empty();
+        let clean_host = host_edit
+            .trim()
+            .trim_start_matches("https://")
+            .trim_start_matches("http://")
+            .trim_end_matches('/')
+            .to_owned();
+
+        let can_save = available && !clean_host.is_empty() && !token_edit.is_empty();
         let payload = serde_json::json!({
-            "host": host_edit,
+            "host": clean_host,
             "token": token_edit,
         })
         .to_string();
@@ -238,7 +246,7 @@ pub fn speech(ui: &mut Ui<Message>, page: &Page) -> Result<Vec<NodeId>, RenderEr
         let mut action_buttons = vec![guide_btn, save_btn];
 
         if state.has_named_config {
-            let clear_btn = Button::new("清除固定配置").disabled(!available).build(
+            let clear_btn = Button::new("恢复临时").disabled(!available).build(
                 ui,
                 theme,
                 "named-clear",
@@ -259,7 +267,7 @@ pub fn speech(ui: &mut Ui<Message>, page: &Page) -> Result<Vec<NodeId>, RenderEr
 
         let action_row = SettingRow::new("配置操作")
             .detail(if state.has_named_config {
-                "固定隧道配置已落盘生效；点击保存可覆盖更新"
+                "固定隧道配置已生效；点击保存可更新并启动"
             } else {
                 "填入域名与令牌后点击保存并应用"
             })
