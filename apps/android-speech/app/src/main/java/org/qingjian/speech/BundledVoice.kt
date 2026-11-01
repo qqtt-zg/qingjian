@@ -33,15 +33,16 @@ object BundledVoice {
             for(child in listOf("lexicon-zh.txt","dict","date-zh.fst","number-zh.fst","phone-zh.fst"))copy(context,"$name/$child",File(root,child))
             File(root,"ready-zh-v1").writeText("1")
         }
+        val numThreads = SpeechPerformance.threads(context)
         if(heart) return OfflineTts(config=OfflineTtsConfig(model=OfflineTtsModelConfig(
             kokoro=OfflineTtsKokoroModelConfig(model=File(root,"model.onnx").path,
                 voices=File(root,"voices.bin").path, tokens=File(root,"tokens.txt").path,
                 lexicon=File(root,"lexicon-us-en.txt").path+","+File(root,"lexicon-zh.txt").path,
-                dataDir=File(root,"espeak-ng-data").path,dictDir=File(root,"dict").path,lang=""),numThreads=2)))
+                dataDir=File(root,"espeak-ng-data").path,dictDir=File(root,"dict").path,lang=""),numThreads=numThreads)))
         return OfflineTts(config=OfflineTtsConfig(model=OfflineTtsModelConfig(
             kitten=OfflineTtsKittenModelConfig(model=File(root,"model.fp16.onnx").path,
                 voices=File(root,"voices.bin").path, tokens=File(root,"tokens.txt").path,
-                dataDir=File(root,"espeak-ng-data").path),numThreads=2)))
+                dataDir=File(root,"espeak-ng-data").path),numThreads=numThreads)))
     }
     private fun copy(context: Context, asset: String, target: File) {
         val children = context.assets.list(asset) ?: emptyArray()

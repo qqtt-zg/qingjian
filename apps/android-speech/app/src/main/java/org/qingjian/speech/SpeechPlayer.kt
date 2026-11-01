@@ -48,6 +48,25 @@ class SpeechPlayer(
 
     fun configure() { enqueue("") }
 
+    fun warmup() {
+        executor.execute {
+            if (closed) return@execute
+            SpeechPerformance.applyPriority(context)
+            val prefs = context.getSharedPreferences("speech", 0)
+            val pack = prefs.getString("pack", "builtin") ?: "builtin"
+            val voice = prefs.getInt("voice", 1)
+            // 极速/狂暴模式下，在后台静默预热一次，消除首字冷启动的图分配与算子初始化开销
+            if (SpeechPerformance.mode(context) == SpeechPerformance.MODE_EXTREME) {
+                runCatching {
+                    if (voice == 1 && bilingual == null) {
+                        bilingual = BundledVoice.create(context, 1)
+                        bilingual?.generate("a", 3, 1.0f)
+                    }
+                }
+            }
+        }
+    }
+
     fun cancelPending() {
         serial.incrementAndGet()
         synchronized(monitor) { pending=null }
@@ -78,9 +97,11 @@ class SpeechPlayer(
             val pack=prefs.getString("pack","builtin") ?: "builtin"
             val names=VoiceLibrary.names(context,pack)
             val selected=prefs.getInt("voice",0).coerceIn(0,names.lastIndex)
+            val threads=SpeechPerformance.threads(context)
             var label=names[selected]
-            val key=if(pack=="builtin") "builtin:${BundledVoice.engineKey(selected)}" else pack
+            val key=if(pack=="builtin") "builtin:${BundledVoice.engineKey(selected)}:$threads" else "$pack:$threads"
             try {
+                SpeechPerformance.applyPriority(context)
                 val plan=if(next.second.isEmpty())listOf(SpeechSegment("",false)) else SpeechPlan.split(next.second)
                 val parts=mutableListOf<Pair<FloatArray,Int>>()
                 for(segment in plan) {

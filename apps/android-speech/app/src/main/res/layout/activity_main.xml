@@ -279,6 +279,53 @@
                 android:layout_marginBottom="12dp"
                 android:background="@color/divider_color" />
 
+            <!-- 性能模式选择行 (原生 Spinner) -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:gravity="center_vertical"
+                android:orientation="horizontal">
+
+                <LinearLayout
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:orientation="vertical">
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="性能模式"
+                        android:textColor="@color/text_primary"
+                        android:textSize="15sp"
+                        android:textStyle="bold" />
+
+                    <TextView
+                        android:id="@+id/tvPerfModeDesc"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="2dp"
+                        android:text="旗舰多核全速调度，降低发音延迟"
+                        android:textColor="@color/text_secondary"
+                        android:textSize="12sp" />
+                </LinearLayout>
+
+                <Spinner
+                    android:id="@+id/spPerfMode"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:dropDownWidth="200dp"
+                    android:gravity="end|center_vertical"
+                    android:spinnerMode="dropdown" />
+            </LinearLayout>
+
+            <View
+                android:layout_width="match_parent"
+                android:layout_height="0.5dp"
+                android:layout_marginTop="12dp"
+                android:layout_marginBottom="12dp"
+                android:background="@color/divider_color" />
+
             <!-- 音色选择行 (原生 Spinner) -->
             <LinearLayout
                 android:layout_width="match_parent"

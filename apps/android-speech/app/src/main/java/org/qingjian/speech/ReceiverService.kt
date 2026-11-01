@@ -61,6 +61,7 @@ class ReceiverService : Service() {
             if (!destroyed) getSharedPreferences("speech", 0).edit().putString("last_playback", it).apply()
             report(it)
         }, { main.post { if (!receiving && !destroyed && player.isIdle()) stopSelf() } })
+        player.warmup()
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {

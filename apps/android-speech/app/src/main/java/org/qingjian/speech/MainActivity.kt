@@ -41,6 +41,7 @@ open class MainActivity : ComponentActivity() {
     private lateinit var received: TextView
     private lateinit var playback: TextView
     private lateinit var voicePicker: Spinner
+    private lateinit var perfModePicker: Spinner
     private lateinit var gainAmount: TextView
     private lateinit var gainSeekBar: SeekBar
     private lateinit var presetButtons: List<Button>
@@ -161,6 +162,7 @@ open class MainActivity : ComponentActivity() {
         received = findViewById(R.id.tvReceived)
         playback = findViewById(R.id.tvPlayback)
         voicePicker = findViewById(R.id.spVoicePicker)
+        perfModePicker = findViewById(R.id.spPerfMode)
         gainAmount = findViewById(R.id.tvGainAmount)
         gainSeekBar = findViewById(R.id.sbGain)
 
@@ -176,6 +178,26 @@ open class MainActivity : ComponentActivity() {
         }
         findViewById<Button>(R.id.btnStop).setOnClickListener {
             connectionControls.stop()
+        }
+
+        // 性能模式选择
+        val perfAdapter = ArrayAdapter(this, android.R.layout.simple_spinner_dropdown_item, SpeechPerformance.labels)
+        perfModePicker.adapter = perfAdapter
+        val currentPerfMode = SpeechPerformance.mode(this)
+        perfModePicker.setSelection(currentPerfMode)
+        perfModePicker.onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
+            override fun onItemSelected(parent: AdapterView<*>?, view: View?, position: Int, id: Long) {
+                if (position != SpeechPerformance.mode(this@MainActivity)) {
+                    SpeechPerformance.setMode(this@MainActivity, position)
+                    val tvDesc = findViewById<TextView>(R.id.tvPerfModeDesc)
+                    tvDesc?.text = when(position) {
+                        SpeechPerformance.MODE_EXTREME -> "6大核满频调度 + 算子预热，出声延迟极低"
+                        SpeechPerformance.MODE_BALANCED -> "4核并发加速，主流旗舰均衡流畅"
+                        else -> "2核温和调度，标准低功耗"
+                    }
+                }
+            }
+            override fun onNothingSelected(parent: AdapterView<*>?) {}
         }
 
         // 音色选择与试播

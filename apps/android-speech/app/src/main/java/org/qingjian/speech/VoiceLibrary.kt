@@ -34,10 +34,11 @@ object VoiceLibrary {
         val lexicon=data.optString("lexicon").let {if(it.isBlank()) "" else path(root,it)}
         val phonemes=data.optString("data_dir").let {if(it.isBlank()) "" else path(root,it)}
         require(File(model).isFile && File(tokens).isFile)
+        val numThreads = SpeechPerformance.threads(context)
         val config=when(data.getString("engine")) {
-            "kitten"->OfflineTtsModelConfig(kitten=OfflineTtsKittenModelConfig(model=model,tokens=tokens,voices=voices,dataDir=phonemes),numThreads=2)
-            "vits"->OfflineTtsModelConfig(vits=OfflineTtsVitsModelConfig(model=model,tokens=tokens,lexicon=lexicon,dataDir=phonemes),numThreads=2)
-            "kokoro"->OfflineTtsModelConfig(kokoro=OfflineTtsKokoroModelConfig(model=model,tokens=tokens,voices=voices,dataDir=phonemes,lexicon=lexicon,lang="en-us"),numThreads=2)
+            "kitten"->OfflineTtsModelConfig(kitten=OfflineTtsKittenModelConfig(model=model,tokens=tokens,voices=voices,dataDir=phonemes),numThreads=numThreads)
+            "vits"->OfflineTtsModelConfig(vits=OfflineTtsVitsModelConfig(model=model,tokens=tokens,lexicon=lexicon,dataDir=phonemes),numThreads=numThreads)
+            "kokoro"->OfflineTtsModelConfig(kokoro=OfflineTtsKokoroModelConfig(model=model,tokens=tokens,voices=voices,dataDir=phonemes,lexicon=lexicon,lang="en-us"),numThreads=numThreads)
             else->throw IllegalArgumentException("不支持此音色引擎")
         }
         return OfflineTts(config=OfflineTtsConfig(model=config))
