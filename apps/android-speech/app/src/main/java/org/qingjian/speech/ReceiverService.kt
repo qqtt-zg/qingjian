@@ -55,6 +55,8 @@ class ReceiverService : Service() {
 
     override fun onCreate() {
         super.onCreate()
+        System.setProperty("java.net.preferIPv4Stack", "true")
+        System.setProperty("java.net.preferIPv6Addresses", "false")
         BundledVoice.initializeSelection(this)
         getSystemService(NotificationManager::class.java).createNotificationChannel(NotificationChannel("speech", "朗读连接", NotificationManager.IMPORTANCE_LOW))
         player = SpeechPlayer(this, {
@@ -244,7 +246,7 @@ class ReceiverService : Service() {
                             .put("control_revision", controlRevision)
                         val http = URL(pair.base + "/api/device").openConnection() as HttpURLConnection
                         try {
-                            http.instanceFollowRedirects = false; http.connectTimeout = 5000; http.readTimeout = 5000
+                            http.instanceFollowRedirects = false; http.connectTimeout = 2500; http.readTimeout = 5000
                             http.requestMethod = "POST"; http.doOutput = true
                             http.setRequestProperty("Authorization", "Bearer ${pair.token}")
                             http.setRequestProperty("Content-Type", "application/json")
@@ -263,7 +265,7 @@ class ReceiverService : Service() {
         connection = http
         try {
             http.instanceFollowRedirects = false
-            http.connectTimeout = 10000; http.readTimeout = 22000
+            http.connectTimeout = 2500; http.readTimeout = 22000
             http.setRequestProperty("Authorization", "Bearer ${pair.token}")
             if (http.responseCode == 401) throw SecurityException()
             check(http.responseCode == 200)

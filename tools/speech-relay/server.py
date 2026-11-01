@@ -115,6 +115,10 @@ class SpeechHandler(BaseHTTPRequestHandler):
             self.end_headers()
             if self.command != "HEAD":
                 self.wfile.write(body)
+                try:
+                    self.wfile.flush()
+                except (ConnectionError, TimeoutError, OSError):
+                    pass
         except (ConnectionError, TimeoutError):
             pass
 

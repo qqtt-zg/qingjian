@@ -142,6 +142,8 @@ open class MainActivity : ComponentActivity() {
 
     override fun onCreate(state: Bundle?) {
         super.onCreate(state)
+        System.setProperty("java.net.preferIPv4Stack", "true")
+        System.setProperty("java.net.preferIPv6Addresses", "false")
         quickScan = state?.getBoolean("quick_scan") ?: intent.getBooleanExtra("return_after_scan", false)
         finishAfterPermission = state?.getBoolean("finish_after_permission") ?: false
         BundledVoice.initializeSelection(this)
